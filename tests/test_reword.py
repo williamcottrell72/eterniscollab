@@ -5,71 +5,88 @@ Unit tests for reword functions in probability_estimator module.
 import pytest
 import os
 import sys
+import asyncio
 
 # Add parent directory to path to import probability_estimator
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from probability_estimator import reword_prompt_openai, reword_prompt_claude
+from probability_estimator import reword_prompt
 
 
 class TestRewordOpenAI:
-    """Tests for reword_prompt_openai function."""
+    """Tests for reword_prompt with OpenAI models via OpenRouter."""
 
-    def test_temperature_zero_returns_original(self):
+    @pytest.fixture
+    def openrouter_api_key(self):
+        """Get OpenRouter API key from environment."""
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            pytest.skip("OPENROUTER_API_KEY environment variable not set")
+        return api_key
+
+    @pytest.mark.asyncio
+    async def test_temperature_zero_returns_original(self):
         """Test that temperature=0 returns the original prompt unchanged."""
         original = "Will Kamala Harris run for president again?"
-        result = reword_prompt_openai(original, temperature=0)
+        result = await reword_prompt(original, temperature=0)
         assert result == original
 
-    # def test_requires_api_key(self):
-    #     """Test that function raises error when API key is not available."""
-    #     original = "Will Kamala Harris run for president again?"
-    #     # Temporarily remove env variable if it exists
-    #     old_key = os.environ.pop('OPENAI_API_KEY', None)
+    @pytest.mark.asyncio
+    async def test_requires_api_key(self):
+        """Test that function raises error when API key is not available."""
+        original = "Will Kamala Harris run for president again?"
+        # Temporarily remove env variable if it exists
+        old_key = os.environ.pop('OPENROUTER_API_KEY', None)
 
-    #     try:
-    #         with pytest.raises(ValueError, match="OpenAI API key not provided"):
-    #             reword_prompt_openai(original, temperature=0.5, api_key=None)
-    #     finally:
-    #         # Restore env variable if it existed
-    #         if old_key:
-    #             os.environ['OPENAI_API_KEY'] = old_key
+        try:
+            with pytest.raises(ValueError, match="OpenRouter API key not provided"):
+                await reword_prompt(original, temperature=0.5, api_key=None)
+        finally:
+            # Restore env variable if it existed
+            if old_key:
+                os.environ['OPENROUTER_API_KEY'] = old_key
 
-    def test_returns_string(self):
+    @pytest.mark.asyncio
+    async def test_returns_string(self, openrouter_api_key):
         """Test that function returns a string (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('OPENAI_API_KEY')
 
-        if not api_key:
-            pytest.skip("OPENAI_API_KEY not set")
-
-        result = reword_prompt_openai(original, temperature=0.5, api_key=api_key)
+        result = await reword_prompt(
+            original,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
         assert isinstance(result, str)
         assert len(result) > 0
 
-    def test_low_temperature_produces_similar_output(self):
+    @pytest.mark.asyncio
+    async def test_low_temperature_produces_similar_output(self, openrouter_api_key):
         """Test that low temperature produces output similar to original (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('OPENAI_API_KEY')
 
-        if not api_key:
-            pytest.skip("OPENAI_API_KEY not set")
+        result = await reword_prompt(
+            original,
+            temperature=0.1,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
 
-        result = reword_prompt_openai(original, temperature=0.1, api_key=api_key)
-        breakpoint() 
         # Check that key terms are preserved
         assert "Kamala Harris" in result or "Harris" in result
         assert "president" in result.lower() or "office" in result.lower()
 
-    def test_high_temperature_produces_different_output(self):
+    @pytest.mark.asyncio
+    async def test_high_temperature_produces_different_output(self, openrouter_api_key):
         """Test that high temperature can produce more varied output (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('OPENAI_API_KEY')
 
-        if not api_key:
-            pytest.skip("OPENAI_API_KEY not set")
-
-        result = reword_prompt_openai(original, temperature=0.9, api_key=api_key)
+        result = await reword_prompt(
+            original,
+            temperature=0.9,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
 
         # Result should still be a valid question string
         assert isinstance(result, str)
@@ -78,18 +95,20 @@ class TestRewordOpenAI:
         # Note: This is probabilistic, so might occasionally fail
         assert result != original or temperature == 0
 
-    def test_different_calls_produce_variety(self):
+    @pytest.mark.asyncio
+    async def test_different_calls_produce_variety(self, openrouter_api_key):
         """Test that multiple calls with same prompt produce varied results (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('OPENAI_API_KEY')
 
-        if not api_key:
-            pytest.skip("OPENAI_API_KEY not set")
-
-        results = [
-            reword_prompt_openai(original, temperature=0.7, api_key=api_key)
-            for _ in range(3)
-        ]
+        results = []
+        for _ in range(3):
+            result = await reword_prompt(
+                original,
+                temperature=0.7,
+                api_key=openrouter_api_key,
+                model="openai/gpt-4o-mini"
+            )
+            results.append(result)
 
         # At least some variety should exist (probabilistic test)
         # Check that not all results are identical
@@ -98,63 +117,64 @@ class TestRewordOpenAI:
 
 
 class TestRewordClaude:
-    """Tests for reword_prompt_claude function."""
+    """Tests for reword_prompt with Claude models via OpenRouter."""
 
-    def test_temperature_zero_returns_original(self):
+    @pytest.fixture
+    def openrouter_api_key(self):
+        """Get OpenRouter API key from environment."""
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            pytest.skip("OPENROUTER_API_KEY environment variable not set")
+        return api_key
+
+    @pytest.mark.asyncio
+    async def test_temperature_zero_returns_original(self):
         """Test that temperature=0 returns the original prompt unchanged."""
         original = "Will Kamala Harris run for president again?"
-        result = reword_prompt_claude(original, temperature=0)
+        result = await reword_prompt(original, temperature=0)
         assert result == original
 
-    # def test_requires_api_key(self):
-    #     """Test that function raises error when API key is not available."""
-    #     original = "Will Kamala Harris run for president again?"
-    #     # Temporarily remove env variable if it exists
-    #     old_key = os.environ.pop('ANTHROPIC_API_KEY', None)
-
-    #     try:
-    #         with pytest.raises(ValueError, match="Anthropic API key not provided"):
-    #             reword_prompt_claude(original, temperature=0.5, api_key=None)
-    #     finally:
-    #         # Restore env variable if it existed
-    #         if old_key:
-    #             os.environ['ANTHROPIC_API_KEY'] = old_key
-
-    def test_returns_string(self):
+    @pytest.mark.asyncio
+    async def test_returns_string(self, openrouter_api_key):
         """Test that function returns a string (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if not api_key:
-            pytest.skip("ANTHROPIC_API_KEY not set")
-
-        result = reword_prompt_claude(original, temperature=0.5, api_key=api_key)
+        result = await reword_prompt(
+            original,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="anthropic/claude-3.5-sonnet"
+        )
         assert isinstance(result, str)
         assert len(result) > 0
 
-    def test_low_temperature_produces_similar_output(self):
+    @pytest.mark.asyncio
+    async def test_low_temperature_produces_similar_output(self, openrouter_api_key):
         """Test that low temperature produces output similar to original (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if not api_key:
-            pytest.skip("ANTHROPIC_API_KEY not set")
-
-        result = reword_prompt_claude(original, temperature=0.1, api_key=api_key)
+        result = await reword_prompt(
+            original,
+            temperature=0.1,
+            api_key=openrouter_api_key,
+            model="anthropic/claude-3.5-sonnet"
+        )
 
         # Check that key terms are preserved
         assert "Kamala Harris" in result or "Harris" in result
         assert "president" in result.lower() or "office" in result.lower()
 
-    def test_high_temperature_produces_different_output(self):
+    @pytest.mark.asyncio
+    async def test_high_temperature_produces_different_output(self, openrouter_api_key):
         """Test that high temperature can produce more varied output (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if not api_key:
-            pytest.skip("ANTHROPIC_API_KEY not set")
-
-        result = reword_prompt_claude(original, temperature=0.9, api_key=api_key)
+        result = await reword_prompt(
+            original,
+            temperature=0.9,
+            api_key=openrouter_api_key,
+            model="anthropic/claude-3.5-sonnet"
+        )
 
         # Result should still be a valid question string
         assert isinstance(result, str)
@@ -162,18 +182,20 @@ class TestRewordClaude:
         # The reworded prompt should be different from original (in most cases)
         assert result != original or temperature == 0
 
-    def test_different_calls_produce_variety(self):
+    @pytest.mark.asyncio
+    async def test_different_calls_produce_variety(self, openrouter_api_key):
         """Test that multiple calls with same prompt produce varied results (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if not api_key:
-            pytest.skip("ANTHROPIC_API_KEY not set")
-
-        results = [
-            reword_prompt_claude(original, temperature=0.7, api_key=api_key)
-            for _ in range(3)
-        ]
+        results = []
+        for _ in range(3):
+            result = await reword_prompt(
+                original,
+                temperature=0.7,
+                api_key=openrouter_api_key,
+                model="anthropic/claude-3.5-sonnet"
+            )
+            results.append(result)
 
         # At least some variety should exist (probabilistic test)
         unique_results = set(results)
@@ -181,32 +203,45 @@ class TestRewordClaude:
 
 
 class TestRewordComparison:
-    """Tests comparing behavior between OpenAI and Claude reword functions."""
+    """Tests comparing behavior between OpenAI and Claude models via OpenRouter."""
 
-    def test_both_respect_temperature_zero(self):
-        """Test that both functions return original at temperature=0."""
+    @pytest.fixture
+    def openrouter_api_key(self):
+        """Get OpenRouter API key from environment."""
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            pytest.skip("OPENROUTER_API_KEY environment variable not set")
+        return api_key
+
+    @pytest.mark.asyncio
+    async def test_both_respect_temperature_zero(self):
+        """Test that both models return original at temperature=0."""
         original = "Will Kamala Harris run for president again?"
 
-        openai_result = reword_prompt_openai(original, temperature=0)
-        claude_result = reword_prompt_claude(original, temperature=0)
+        openai_result = await reword_prompt(original, temperature=0)
+        claude_result = await reword_prompt(original, temperature=0)
 
         assert openai_result == original
         assert claude_result == original
         assert openai_result == claude_result
 
-    def test_both_produce_valid_output_types(self):
-        """Test that both functions produce string outputs (requires valid API keys)."""
+    @pytest.mark.asyncio
+    async def test_both_produce_valid_output_types(self, openrouter_api_key):
+        """Test that both models produce string outputs (requires valid API key)."""
         original = "Will Kamala Harris run for president again?"
-        openai_key = os.environ.get('OPENAI_API_KEY')
-        claude_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if not openai_key:
-            pytest.skip("OPENAI_API_KEY not set")
-        if not claude_key:
-            pytest.skip("ANTHROPIC_API_KEY not set")
-
-        openai_result = reword_prompt_openai(original, temperature=0.5, api_key=openai_key)
-        claude_result = reword_prompt_claude(original, temperature=0.5, api_key=claude_key)
+        openai_result = await reword_prompt(
+            original,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
+        claude_result = await reword_prompt(
+            original,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="anthropic/claude-3.5-sonnet"
+        )
 
         assert isinstance(openai_result, str)
         assert isinstance(claude_result, str)
@@ -217,44 +252,55 @@ class TestRewordComparison:
 class TestRewordEdgeCases:
     """Tests for edge cases in reword functions."""
 
-    def test_empty_string_handling(self):
+    @pytest.fixture
+    def openrouter_api_key(self):
+        """Get OpenRouter API key from environment."""
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            pytest.skip("OPENROUTER_API_KEY environment variable not set")
+        return api_key
+
+    @pytest.mark.asyncio
+    async def test_empty_string_handling(self):
         """Test behavior with empty string input."""
         empty = ""
 
         # Temperature 0 should return empty string
-        assert reword_prompt_openai(empty, temperature=0) == empty
-        assert reword_prompt_claude(empty, temperature=0) == empty
+        assert await reword_prompt(empty, temperature=0) == empty
 
-    def test_very_long_prompt(self):
-        """Test behavior with very long prompts (requires valid API keys)."""
+    @pytest.mark.asyncio
+    async def test_very_long_prompt(self, openrouter_api_key):
+        """Test behavior with very long prompts (requires valid API key)."""
         long_prompt = "Will Kamala Harris run for president again? " * 20
-        openai_key = os.environ.get('OPENAI_API_KEY')
-        claude_key = os.environ.get('ANTHROPIC_API_KEY')
 
-        if openai_key:
-            result = reword_prompt_openai(long_prompt, temperature=0.5, api_key=openai_key)
-            assert isinstance(result, str)
-            assert len(result) > 0
-        else:
-            pytest.skip("OPENAI_API_KEY not set")
+        result = await reword_prompt(
+            long_prompt,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
+        assert isinstance(result, str)
+        assert len(result) > 0
 
-    def test_special_characters_in_prompt(self):
+    @pytest.mark.asyncio
+    async def test_special_characters_in_prompt(self):
         """Test handling of special characters."""
         special_prompt = "Will Kamala Harris run for president again? (2028 election) [yes/no]"
 
         # At temperature 0, should return unchanged
-        assert reword_prompt_openai(special_prompt, temperature=0) == special_prompt
-        assert reword_prompt_claude(special_prompt, temperature=0) == special_prompt
+        assert await reword_prompt(special_prompt, temperature=0) == special_prompt
 
-    def test_non_question_prompts(self):
-        """Test reword functions work with non-question statements (requires valid API keys)."""
+    @pytest.mark.asyncio
+    async def test_non_question_prompts(self, openrouter_api_key):
+        """Test reword functions work with non-question statements (requires valid API key)."""
         statement = "Kamala Harris might run for president again."
-        openai_key = os.environ.get('OPENAI_API_KEY')
 
-        if not openai_key:
-            pytest.skip("OPENAI_API_KEY not set")
-
-        result = reword_prompt_openai(statement, temperature=0.5, api_key=openai_key)
+        result = await reword_prompt(
+            statement,
+            temperature=0.5,
+            api_key=openrouter_api_key,
+            model="openai/gpt-4o-mini"
+        )
         assert isinstance(result, str)
         assert len(result) > 0
 

@@ -10,6 +10,34 @@ from typing import Optional
 import os
 
 
+def generate_knowledge_cutoff_instruction(knowledge_cutoff_date: Optional[str] = None) -> str:
+    """
+    Generate instruction text for knowledge cutoff date constraint.
+
+    This function creates a standardized instruction that can be appended to system prompts
+    to enforce a knowledge cutoff date, ensuring the LLM does not use information after
+    the specified date.
+
+    Args:
+        knowledge_cutoff_date: Date string (e.g., "January 2024", "2024-01-01", "Jan 1, 2024").
+                              If None, returns empty string (no constraint).
+
+    Returns:
+        str: Instruction text to append to system prompt, or empty string if no cutoff specified.
+
+    Examples:
+        >>> generate_knowledge_cutoff_instruction("January 2024")
+        '\\n\\nIMPORTANT: You must not use any information, events, or data from after January 2024...'
+
+        >>> generate_knowledge_cutoff_instruction(None)
+        ''
+    """
+    if knowledge_cutoff_date is None:
+        return ""
+
+    return f"\n\nIMPORTANT: You must not use any information, events, or data from after {knowledge_cutoff_date}. Your knowledge is limited to information available up to and including {knowledge_cutoff_date}."
+
+
 def extract_numeric_value(text: str, value_name: str = "value") -> float:
     """
     Extract a numeric value (0-1) from text response.
@@ -244,6 +272,106 @@ def _query_claude(
         raise Exception(f"Claude API call failed: {str(e)}")
 
 
+def _query_openrouter(
+    system_prompt: str,
+    user_prompt: str,
+    api_key: str,
+    model: str,
+    temperature: float,
+    max_tokens: int
+) -> str:
+    """
+    Internal function to query OpenRouter API.
+
+    Args:
+        system_prompt: System prompt
+        user_prompt: User prompt
+        api_key: OpenRouter API key
+        model: Model identifier (format: "provider/model-name")
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens
+
+    Returns:
+        str: Response text from the API
+
+    Raises:
+        ImportError: If openai package not installed
+        Exception: If API call fails
+    """
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise ImportError("OpenAI package not installed. Install with: pip install openai")
+
+    # OpenRouter uses OpenAI-compatible API
+    client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key
+    )
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+        return response.choices[0].message.content
+
+    except Exception as e:
+        raise Exception(f"OpenRouter API call failed: {str(e)}")
+
+
+def query_llm_for_numeric_value_openrouter(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    api_key: str,
+    temperature: float = 0.7,
+    max_tokens: int = 500,
+    value_name: str = "value"
+) -> float:
+    """
+    Query an LLM via OpenRouter and extract a numeric value from the response.
+
+    Args:
+        system_prompt: The system prompt that defines the LLM's role
+        user_prompt: The user prompt with the actual question/task
+        model: OpenRouter model identifier (format: "provider/model-name")
+        api_key: OpenRouter API key
+        temperature: Sampling temperature (default: 0.7)
+        max_tokens: Maximum tokens in response (default: 500)
+        value_name: Name of value being extracted, for error messages (default: "value")
+
+    Returns:
+        float: Extracted numeric value between 0 and 1
+
+    Raises:
+        ValueError: If value cannot be extracted
+        Exception: If API call fails
+        ImportError: If required package is not installed
+
+    Examples:
+        >>> query_llm_for_numeric_value_openrouter(
+        ...     "You are a probability estimator",
+        ...     "What is the probability of rain?",
+        ...     "openai/gpt-4o-mini",
+        ...     "sk-or-..."
+        ... )
+        0.45
+    """
+    response_text = _query_openrouter(
+        system_prompt, user_prompt, api_key, model, temperature, max_tokens
+    )
+
+    # Extract and return the numeric value
+    return extract_numeric_value(response_text, value_name)
+
+
 def query_llm_for_text(
     system_prompt: str,
     user_prompt: str,
@@ -289,3 +417,34 @@ def query_llm_for_text(
         return _query_claude(
             system_prompt, user_prompt, api_key, model, temperature, max_tokens
         )
+
+
+def query_llm_for_text_openrouter(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    api_key: str,
+    temperature: float = 0.7,
+    max_tokens: int = 200
+) -> str:
+    """
+    Query an LLM via OpenRouter and return raw text response.
+
+    Args:
+        system_prompt: The system prompt that defines the LLM's role
+        user_prompt: The user prompt with the actual question/task
+        model: OpenRouter model identifier (format: "provider/model-name")
+        api_key: OpenRouter API key
+        temperature: Sampling temperature (default: 0.7)
+        max_tokens: Maximum tokens in response (default: 200)
+
+    Returns:
+        str: Raw text response from the LLM
+
+    Raises:
+        Exception: If API call fails
+        ImportError: If required package is not installed
+    """
+    return _query_openrouter(
+        system_prompt, user_prompt, api_key, model, temperature, max_tokens
+    )
