@@ -10,7 +10,9 @@ from typing import Optional
 import os
 
 
-def generate_knowledge_cutoff_instruction(knowledge_cutoff_date: Optional[str] = None) -> str:
+def generate_knowledge_cutoff_instruction(
+    knowledge_cutoff_date: Optional[str] = None,
+) -> str:
     """
     Generate instruction text for knowledge cutoff date constraint.
 
@@ -35,7 +37,7 @@ def generate_knowledge_cutoff_instruction(knowledge_cutoff_date: Optional[str] =
     if knowledge_cutoff_date is None:
         return ""
 
-    return f"\n\nIMPORTANT: You must not use any information, events, or data from after {knowledge_cutoff_date}. Your knowledge is limited to information available up to and including {knowledge_cutoff_date}."
+    return f"\n\nIMPORTANT: The date is {knowledge_cutoff_date}. You must not use any information, events, or data from after {knowledge_cutoff_date}. Your knowledge is limited to information available up to and including {knowledge_cutoff_date}."
 
 
 def extract_numeric_value(text: str, value_name: str = "value") -> float:
@@ -71,7 +73,7 @@ def extract_numeric_value(text: str, value_name: str = "value") -> float:
     """
     # Try to find fractions first (e.g., "3/4", "1/2") - highest priority
     # Fractions are checked first to avoid confusion with decimals
-    fraction_pattern = r'(\d+)\s*/\s*(\d+)'
+    fraction_pattern = r"(\d+)\s*/\s*(\d+)"
     fraction_matches = re.findall(fraction_pattern, text)
 
     if fraction_matches:
@@ -81,7 +83,7 @@ def extract_numeric_value(text: str, value_name: str = "value") -> float:
                 return value
 
     # Try to find percentage (e.g., "25%", "75.5%")
-    percent_pattern = r'(\d+(?:\.\d+)?)\s*%'
+    percent_pattern = r"(\d+(?:\.\d+)?)\s*%"
     percent_matches = re.findall(percent_pattern, text)
 
     if percent_matches:
@@ -92,7 +94,7 @@ def extract_numeric_value(text: str, value_name: str = "value") -> float:
 
     # Try to find decimal value (e.g., "0.25", "0.75", "0", "1")
     # Match standalone numbers between 0 and 1
-    decimal_pattern = r'\b(0\.\d+|1\.0+|^0$|^1$)\b'
+    decimal_pattern = r"\b(0\.\d+|1\.0+|^0$|^1$)\b"
     decimal_matches = re.findall(decimal_pattern, text)
 
     if decimal_matches:
@@ -115,7 +117,7 @@ def query_llm_for_numeric_value(
     model: str,
     temperature: float = 0.7,
     max_tokens: int = 500,
-    value_name: str = "value"
+    value_name: str = "value",
 ) -> float:
     """
     Unified function to query an LLM and extract a numeric value from the response.
@@ -178,7 +180,7 @@ def _query_openai(
     api_key: str,
     model: str,
     temperature: float,
-    max_tokens: int
+    max_tokens: int,
 ) -> str:
     """
     Internal function to query OpenAI API.
@@ -201,7 +203,9 @@ def _query_openai(
     try:
         from openai import OpenAI
     except ImportError:
-        raise ImportError("OpenAI package not installed. Install with: pip install openai")
+        raise ImportError(
+            "OpenAI package not installed. Install with: pip install openai"
+        )
 
     client = OpenAI(api_key=api_key)
 
@@ -210,10 +214,10 @@ def _query_openai(
             model=model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
+                {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
 
         return response.choices[0].message.content
@@ -228,7 +232,7 @@ def _query_claude(
     api_key: str,
     model: str,
     temperature: float,
-    max_tokens: int
+    max_tokens: int,
 ) -> str:
     """
     Internal function to query Claude API.
@@ -251,7 +255,9 @@ def _query_claude(
     try:
         from anthropic import Anthropic
     except ImportError:
-        raise ImportError("Anthropic package not installed. Install with: pip install anthropic")
+        raise ImportError(
+            "Anthropic package not installed. Install with: pip install anthropic"
+        )
 
     client = Anthropic(api_key=api_key)
 
@@ -261,9 +267,7 @@ def _query_claude(
             max_tokens=max_tokens,
             temperature=temperature,
             system=system_prompt,
-            messages=[
-                {"role": "user", "content": user_prompt}
-            ]
+            messages=[{"role": "user", "content": user_prompt}],
         )
 
         return response.content[0].text
@@ -278,7 +282,7 @@ def _query_openrouter(
     api_key: str,
     model: str,
     temperature: float,
-    max_tokens: int
+    max_tokens: int,
 ) -> str:
     """
     Internal function to query OpenRouter API.
@@ -301,26 +305,69 @@ def _query_openrouter(
     try:
         from openai import OpenAI
     except ImportError:
-        raise ImportError("OpenAI package not installed. Install with: pip install openai")
-
-    # OpenRouter uses OpenAI-compatible API
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key
-    )
-
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
+        raise ImportError(
+            "OpenAI package not installed. Install with: pip install openai"
         )
 
-        return response.choices[0].message.content
+    # OpenRouter uses OpenAI-compatible API
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+
+    try:
+        # Build request parameters
+        request_params = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        # For reasoning models (gpt-5, o1, o3), add reasoning configuration
+        # This ensures reasoning tokens are properly allocated
+        is_reasoning_model = any(
+            x in model.lower() for x in ["gpt-5", "o1", "o3", "o-1", "o-3"]
+        )
+        if is_reasoning_model:
+            # Use medium effort by default - balance between quality and cost
+            # This allocates ~50% of max_tokens to reasoning
+            request_params["extra_body"] = {"reasoning": {"effort": "medium"}}
+
+        response = client.chat.completions.create(**request_params)
+
+        content = response.choices[0].message.content
+
+        # Check if content is None or empty (can happen with some models/responses)
+        if content is None:
+            raise Exception(
+                "Received None content from OpenRouter API. This may indicate the model refused to respond or encountered an error."
+            )
+
+        if not content.strip():
+            # Check if there's additional information in the response
+            finish_reason = (
+                response.choices[0].finish_reason if response.choices else None
+            )
+
+            # Check if reasoning consumed all tokens
+            if is_reasoning_model and finish_reason == "length":
+                raise Exception(
+                    f"Received empty content from reasoning model ({model}). "
+                    f"Finish reason: {finish_reason}. "
+                    f"This typically means all tokens were used for reasoning and none were left for the actual response. "
+                    f"Try increasing max_tokens or using 'low' reasoning effort."
+                )
+            else:
+                raise Exception(
+                    f"Received empty content from OpenRouter API. "
+                    f"Finish reason: {finish_reason}. "
+                    f"This may indicate the model ({model}) refused to respond, hit content filters, "
+                    f"or is not properly configured for this request. "
+                    f"Try a different model or check OpenRouter model compatibility."
+                )
+
+        return content
 
     except Exception as e:
         raise Exception(f"OpenRouter API call failed: {str(e)}")
@@ -333,7 +380,7 @@ def query_llm_for_numeric_value_openrouter(
     api_key: str,
     temperature: float = 0.7,
     max_tokens: int = 500,
-    value_name: str = "value"
+    value_name: str = "value",
 ) -> float:
     """
     Query an LLM via OpenRouter and extract a numeric value from the response.
@@ -379,7 +426,7 @@ def query_llm_for_text(
     api_key: str,
     model: str,
     temperature: float = 0.7,
-    max_tokens: int = 200
+    max_tokens: int = 200,
 ) -> str:
     """
     Unified function to query an LLM and return raw text response.
@@ -425,7 +472,7 @@ def query_llm_for_text_openrouter(
     model: str,
     api_key: str,
     temperature: float = 0.7,
-    max_tokens: int = 200
+    max_tokens: int = 200,
 ) -> str:
     """
     Query an LLM via OpenRouter and return raw text response.

@@ -9,24 +9,77 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Analyzing "buzz" scores (interest × divisiveness) for topics
 - Generating forecasting questions from trending news
 - Comparing different LLM providers (OpenAI, Claude) via OpenRouter API
+- Downloading and analyzing historical prediction market data from Polymarket
 
 ## Project Structure
 
 ```
 eterniscollab/
-├── buzz.py                          # Buzz score analysis (interest + divisiveness)
-├── probability_estimator.py         # Probability distribution estimation via LLMs
-├── generate_topic_rankings.py       # Generate and rank topics by interest/buzz
-├── topic_generator.py               # Generate trending topics and forecasting questions
-├── utils.py                         # Shared utility functions for LLM API calls
-├── requirements.txt                 # Python dependencies
+├── Core Library Modules (use via import)
+│   ├── buzz.py                      # Buzz score analysis (interest + divisiveness)
+│   ├── probability_estimator.py     # Probability distribution estimation via LLMs
+│   ├── generate_topic_rankings.py   # Generate and rank topics by interest/buzz
+│   ├── topic_generator.py           # Generate trending topics and forecasting questions
+│   ├── utils.py                     # Shared utility functions for LLM API calls
+│   └── polymarket_data.py           # Polymarket historical data downloader
+│
+├── Configuration & Dependencies
+│   ├── requirements.txt             # Python dependencies
+│   ├── pytest.ini                   # Pytest configuration
+│   ├── README.md                    # Main project README
+│   ├── CLAUDE.md                    # This file - project guidance for Claude Code
+│   └── notes.md                     # Development notes
+│
+├── scripts/                         # Command-line scripts and examples
+│   ├── Example Scripts
+│   │   ├── topic_generator_example.py
+│   │   ├── example_openrouter.py
+│   │   ├── example_presidential_election.py
+│   │   ├── example_download_by_slug.py
+│   │   ├── example_improved_workflow.py
+│   │   ├── closed_markets_example.py
+│   │   ├── market_history_example.py
+│   │   └── probability_evolution_example.py
+│   ├── Utility Scripts
+│   │   ├── verify_date_filtering.py    # Verify date filtering works correctly
+│   │   ├── fix_arrow_error.py          # Fix pandas/pyarrow compatibility issues
+│   │   └── fix_jupyter_dependencies.py # Check and fix Jupyter dependencies
+│   ├── Bulk Download Scripts
+│   │   ├── download_selected_markets.py
+│   │   ├── download_selected_markets_volume1wk.py
+│   │   └── market_history_downloader.py
+│   └── test_probability_evolution.py   # Standalone test for probability evolution
+│
+├── docs/                            # Documentation
+│   ├── INDEX.md                     # Documentation index
+│   ├── POLYMARKET_README.md         # Complete Polymarket API documentation
+│   ├── QUICK_START_POLYMARKET.md    # Quick reference for Polymarket data
+│   ├── API_LIMITS_EXPLANATION.md    # Explains 15-day API limit and auto-chunking
+│   ├── FIDELITY_EXPLANATION.md      # Understanding fidelity parameter
+│   ├── TOPIC_GENERATOR_README.md    # Topic generator guide
+│   ├── UTILS_README.md              # Utilities documentation
+│   ├── OPENROUTER_SETUP.md          # OpenRouter API setup
+│   └── ...                          # Additional documentation files
+│
 ├── notebooks/                       # Jupyter notebooks for analysis
 │   ├── probability_distribution_analysis.ipynb
-│   └── buzz_distribution_analysis.ipynb
-├── tests/                           # Unit tests
-│   └── test_topic_generator.py
-├── TOPIC_GENERATOR_README.md        # Documentation for topic generator
-└── topic_generator_example.py      # Example usage scripts
+│   ├── buzz_distribution_analysis.ipynb
+│   ├── probability_evolution.ipynb
+│   ├── polymarket_exploration.ipynb
+│   └── CLOB.ipynb
+│
+├── tests/                           # Unit tests (pytest)
+│   ├── test_topic_generator.py
+│   ├── test_closed_markets.py
+│   ├── test_polymarket_download.py
+│   ├── test_probability.py
+│   ├── test_buzz.py
+│   ├── test_reword.py
+│   ├── test_utils.py
+│   └── test_openrouter.py
+│
+└── data/                            # Data directory (git-ignored)
+    └── polymarket/                  # Cached Polymarket price data (parquet files)
 ```
 
 ## Core Modules
@@ -35,10 +88,13 @@ eterniscollab/
 - **Purpose**: Estimate probability distributions by querying LLMs multiple times with reworded prompts
 - **Key Functions**:
   - `get_probability_distribution()`: Main async function for collecting probability samples
+  - `get_probability_distribution_over_time()`: **NEW** Track how probability estimates evolve with different knowledge cutoff dates
+  - `analyze_probability_evolution()`: Helper function to compute statistics from time series results
   - `reword_prompt()`: Reword prompts with variable flexibility (temperature-controlled)
   - `query_probability()`: Get single probability estimate
 - **Technology**: Uses Pydantic AI with OpenRouter API
 - **Models Supported**: Any OpenRouter model (openai/gpt-4o-mini, anthropic/claude-sonnet-4, etc.)
+- **New Feature**: Time-series analysis of forecast evolution (see PROBABILITY_EVOLUTION_README.md)
 
 ### 2. **buzz.py**
 - **Purpose**: Calculate "buzz scores" for topics based on interest and divisiveness
@@ -76,6 +132,29 @@ eterniscollab/
   - `query_llm_for_text()`: Get raw text responses
   - `extract_numeric_value()`: Parse probabilities, percentages, fractions from text
 - **Providers**: OpenAI, Anthropic (Claude), OpenRouter (unified API)
+
+### 6. **polymarket_data.py**
+- **Purpose**: Download and cache historical price data from Polymarket prediction markets
+- **Key Functions**:
+  - `download_polymarket_prices()`: Core function to download historical prices by token ID
+  - `download_polymarket_prices_by_slug()`: Download by market slug (convenience wrapper)
+  - `download_polymarket_prices_by_event()`: Download for specific market within an event
+  - `get_event_info()`: Get event metadata from Gamma API
+  - `get_market_info()`: Get market metadata (optimized with direct slug queries)
+  - `get_event_markets()`: Discover all markets within an event
+  - `slug_to_token_ids()`: Map slugs to token IDs
+  - `get_all_closed_markets()`: Fetch metadata for all closed markets
+  - `download_month_of_data()`: Convenience function for monthly downloads
+- **Features**:
+  - Automatic caching to Parquet files (avoids redundant API calls)
+  - Automatic chunking for date ranges exceeding 15-day API limit
+  - Date range filtering to ensure clean results
+  - Support for minute-level to daily data (fidelity parameter)
+  - Handles both individual markets and events (collections of markets)
+- **APIs Used**:
+  - CLOB API: Historical price data
+  - Gamma Markets API: Market/event metadata
+- **Documentation**: See POLYMARKET_README.md and API_LIMITS_EXPLANATION.md
 
 ## Jupyter Notebooks
 
@@ -143,7 +222,8 @@ python topic_generator.py
 python topic_generator.py 2 1
 
 # Run example scripts
-python topic_generator_example.py
+python scripts/topic_generator_example.py
+python scripts/example_openrouter.py
 ```
 
 ### Run Generate Topic Rankings
@@ -155,6 +235,36 @@ python generate_topic_rankings.py
 ### Launch Jupyter Notebooks
 ```bash
 jupyter notebook notebooks/
+```
+
+### Download Polymarket Data
+```bash
+# Run example scripts
+python scripts/example_presidential_election.py
+python scripts/example_download_by_slug.py
+python scripts/example_improved_workflow.py
+python scripts/closed_markets_example.py
+python scripts/market_history_example.py
+python scripts/probability_evolution_example.py
+
+# Verify date filtering is working
+python scripts/verify_date_filtering.py
+
+# Bulk download scripts
+python scripts/download_selected_markets.py
+python scripts/market_history_downloader.py
+
+# Run tests for closed markets
+pytest tests/test_closed_markets.py -v
+```
+
+### Utility Scripts
+```bash
+# Fix pandas/pyarrow compatibility issues
+python scripts/fix_arrow_error.py
+
+# Check and fix Jupyter dependencies
+python scripts/fix_jupyter_dependencies.py
 ```
 
 ## Architecture & Design Patterns
@@ -188,6 +298,35 @@ Two types of temperature:
 - Descriptive variable names
 - Constants in UPPER_CASE
 
+### Import Organization
+- **Always place imports at the top of the file**, organized in the following order:
+  1. Standard library imports
+  2. Third-party library imports (numpy, pandas, etc.)
+  3. Local application imports (from our modules)
+- **Avoid local imports inside functions** except in rare cases where absolutely necessary
+- If a local import seems necessary to avoid circular dependencies:
+  1. First, consider refactoring the code to eliminate the circular dependency
+  2. Move shared functionality to a separate utility module
+  3. Restructure module dependencies to create a cleaner hierarchy
+- Example of proper import organization:
+  ```python
+  # Standard library
+  import os
+  from typing import Optional, Dict, List
+
+  # Third-party
+  import numpy as np
+  import pandas as pd
+
+  # Local
+  from utils import extract_numeric_value
+  from polymarket_data import get_all_closed_markets
+  ```
+- The only acceptable case for local imports is when:
+  - It's in a script (not a library module) AND
+  - The import is only needed for a specific command-line feature AND
+  - Moving it to the top would add a heavy dependency for all users of the module
+
 ### Code Organization
   - Group code into directories based on functionality with the goal of minimizing complexity.
   - Attempt to factor out useful functions and code into modules with minimal dependencies cross dependencies.
@@ -197,6 +336,16 @@ Two types of temperature:
   - Avoid duplicate code.  If the same code pattern appears in multiple places, see if we can reduce code by centralizing the function.
   - Avoid monolithic classes that try and do too many things at once.  It's better to split out code for fitting, feature building and backtesting so each can be
     addressed and improved separately.  Any classes that combine these functionalities should be calling well-specified external modules handling fitting, feature building or backtesting.
+  - All markdown files except README.md should go into the docs folder.
+
+### Documentation
+  - **DO NOT create new markdown documentation files** after completing tasks unless explicitly requested by the user.
+  - Update existing documentation files (CLAUDE.md, README.md, or relevant files in docs/) instead of creating new ones.
+  - If a task is complete and requires documentation, update the relevant existing file or simply communicate the results to the user.
+  - Exception: Creating markdown files is acceptable when:
+    - The user explicitly requests a new documentation file
+    - Creating a comprehensive guide for a major new feature that doesn't fit in existing docs
+    - The documentation is clearly part of the deliverable (e.g., a tutorial or specification)
 
 
 

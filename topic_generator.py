@@ -10,6 +10,145 @@ from typing import Dict, List, Optional, Tuple
 from utils import query_llm_for_text_openrouter
 import json
 import re
+from datetime import datetime
+
+
+def validate_questions(
+    topics: Dict[str, List[str]],
+    model: str = "openai/gpt-4o-mini",
+    api_key: Optional[str] = None,
+    temperature: float = 0.3,
+) -> Dict[str, List[str]]:
+    """
+    Validate questions to ensure they are meaningful and not obviously answered.
+
+    Filters out questions that:
+    - Reference outdated contexts (e.g., Biden administration when he's no longer president)
+    - Have obvious answers based on current events
+    - Are meaningless in today's context
+
+    Args:
+        topics: Dictionary mapping topics to questions
+        model: OpenRouter model identifier (default: "openai/gpt-4o-mini")
+        api_key: OpenRouter API key (if None, uses OPENROUTER_API_KEY env var)
+        temperature: Sampling temperature (default: 0.3 for more consistent validation)
+
+    Returns:
+        dict: Filtered topics with only valid questions
+    """
+    if api_key is None:
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "OpenRouter API key not provided and OPENROUTER_API_KEY environment variable not set"
+            )
+
+    current_date = datetime.now().strftime("%B %d, %Y")
+
+    # Collect all questions for batch validation
+    all_questions = []
+    question_to_topic = {}
+    for topic, questions in topics.items():
+        for question in questions:
+            all_questions.append(question)
+            question_to_topic[question] = topic
+
+    if not all_questions:
+        return topics
+
+    # Create validation prompt
+    system_prompt = f"""You are a validation expert checking forecasting questions for logical consistency with current reality.
+
+Today's date is {current_date}.
+
+Your task is to identify questions that are:
+1. NONSENSICAL - Reference outdated contexts (e.g., "Biden administration" policies when Biden is no longer president)
+2. OBVIOUSLY ANSWERED - Have answers that are already clearly determined by current events
+3. MEANINGLESS - Make no sense in today's context
+
+Return ONLY questions that SHOULD BE REMOVED."""
+
+    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(all_questions)])
+
+    user_prompt = f"""Review these forecasting questions and identify which ones should be REMOVED because they are nonsensical, obviously answered, or meaningless in today's context ({current_date}).
+
+QUESTIONS TO REVIEW:
+{questions_text}
+
+EXAMPLES OF QUESTIONS TO REMOVE:
+- "Will the Biden administration achieve X by 2030?" (if Biden is no longer president)
+- "Will candidate X win the 2024 election by November 2024?" (if 2024 election already happened)
+- "Will company X release product Y in 2023?" (if we're past 2023)
+- Questions about events that have already clearly occurred or been decided
+
+Return ONLY a JSON object with this structure:
+{{
+    "remove": [
+        1,
+        3,
+        5
+    ]
+}}
+
+Where the numbers correspond to questions that should be removed.
+If ALL questions are valid, return: {{"remove": []}}
+
+Return ONLY the JSON object, no other text."""
+
+    try:
+        response_text = query_llm_for_text_openrouter(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=1000,
+        )
+
+        # Parse JSON response
+        json_match = re.search(r"\{[\s\S]*\}", response_text, re.DOTALL)
+        if not json_match:
+            json_match = re.search(
+                r"```json\s*(\{[\s\S]*?\})\s*```", response_text, re.DOTALL
+            )
+            if json_match:
+                json_text = json_match.group(1)
+            else:
+                print(
+                    "Warning: Could not parse validation response, keeping all questions"
+                )
+                return topics
+        else:
+            json_text = json_match.group(0)
+
+        validation_result = json.loads(json_text)
+        indices_to_remove = set(validation_result.get("remove", []))
+
+        # Filter out invalid questions
+        questions_to_remove = set()
+        for idx in indices_to_remove:
+            if 1 <= idx <= len(all_questions):
+                questions_to_remove.add(all_questions[idx - 1])
+
+        # Build filtered result
+        filtered_topics = {}
+        removed_count = 0
+        for topic, questions in topics.items():
+            valid_questions = [q for q in questions if q not in questions_to_remove]
+            if valid_questions:  # Only include topics that still have questions
+                filtered_topics[topic] = valid_questions
+            removed_count += len(questions) - len(valid_questions)
+
+        if removed_count > 0:
+            print(
+                f"Validation removed {removed_count} nonsensical or obviously-answered questions"
+            )
+
+        return filtered_topics
+
+    except Exception as e:
+        print(f"Warning: Validation failed ({str(e)}), keeping all questions")
+        return topics
 
 
 def generate_topics_and_questions(
@@ -18,7 +157,9 @@ def generate_topics_and_questions(
     model: str = "openai/gpt-4o-mini:online",
     api_key: Optional[str] = None,
     temperature: float = 0.7,
-    enable_web_search: bool = True
+    enable_web_search: bool = True,
+    num_days: int = 7,
+    validate_questions_flag: bool = True,
 ) -> Dict[str, List[str]]:
     """
     Generate trending topics and forecasting questions using OpenRouter.
@@ -35,6 +176,8 @@ def generate_topics_and_questions(
         api_key: OpenRouter API key (if None, uses OPENROUTER_API_KEY env var)
         temperature: Sampling temperature (default: 0.7)
         enable_web_search: Automatically add ":online" suffix if not present (default: True)
+        num_days: Number of days to look back for recent news (default: 7)
+        validate_questions_flag: Validate and filter out nonsensical questions (default: True)
 
     Returns:
         dict: Mapping of topic keywords to list of forecasting questions
@@ -72,7 +215,9 @@ def generate_topics_and_questions(
     if api_key is None:
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
-            raise ValueError("OpenRouter API key not provided and OPENROUTER_API_KEY environment variable not set")
+            raise ValueError(
+                "OpenRouter API key not provided and OPENROUTER_API_KEY environment variable not set"
+            )
 
     # Enable web search if requested and not already enabled
     if enable_web_search and not model.endswith(":online"):
@@ -81,11 +226,12 @@ def generate_topics_and_questions(
 
     # Get current date for the prompt
     from datetime import datetime
+
     current_date = datetime.now().strftime("%B %d, %Y")
 
     # Generate the prompt for the LLM
     system_prompt = f"""You are an expert analyst who tracks trending topics in news and social media.
-You identify the most impactful and discussed stories from RECENT NEWS (last 7 days), then generate forecasting questions about them.
+You identify the most impactful and discussed stories from RECENT NEWS (last {num_days} days), then generate forecasting questions about them.
 
 Today's date is {current_date}.
 
@@ -94,6 +240,10 @@ CRITICAL REQUIREMENTS:
 2. Do NOT create multiple topics about the same subject (e.g., don't have separate topics for "EU AI Act" and "AI Governance" - combine them into ONE topic)
 3. Group ALL related stories into a SINGLE topic
 4. Generate multiple questions for that one topic if needed
+5. Prefer topics which are divisive, uncertain, or have generated significant debate.
+6. Pay attention to platforms like Twitter / X, Reddit, YouTube, Facebook and news comment sections to identify hot topics.
+7. Pay attention to upcoming events, deadlines, or decisions that could impact the topic.
+8. Be sure to include alternative or niche news outlets like "The Epoch Times", "Heartland Institute", "The Daily Wire", "Zero Hedge", "Breitbart", "The Intercept", "Democracy Now", and "Wall Street Bets" etc. to get a full spectrum of perspectives.
 
 Your forecasting questions must:
 1. Be yes/no questions
@@ -116,6 +266,8 @@ For each topic:
 2. Label the topic with a few keywords (2-5 words)
 3. Generate up to {k_questions} forecasting questions about that topic
 4. Ensure topics are diverse - they should cover different subject areas, events, or domains
+5. Avoid using vague words or ideas - be specific.  For example "Will X have a major impact on Y by end of 2025?" is too vague since "major impact" is subjective. Instead, ask specific questions with measurable outcomes.
+6. Avoid references that are unclear without context. For example, "Will the candidate win by November 2024?" is too vague since "the candidate" is unclear. Instead, specify the candidate's name and position.
 
 TOPIC DIVERSITY REQUIREMENTS:
 - Topics must be from DIFFERENT domains/subject areas
@@ -163,6 +315,8 @@ EXAMPLES OF BAD QUESTIONS:
 - "Will X happen by end of 2024?" (2024 is in the past relative to {current_date})
 - "Will Y occur by March 2025?" (might be in the past depending on current date)
 - "Is climate change real?" (subjective, not future-dated)
+- "Will any major candidate drop out of the race for the 2028 election before September 1, 2028?" (too vague, "major candidate" is subjective)
+- "Will the new solar energy technology be commercially available by January 1, 2027?" (too vague, "commercially available" is too subjective and it is unclear which 'new solar technology' is being referenced)
 
 Return ONLY a JSON object with this exact structure:
 {{
@@ -179,27 +333,64 @@ Do not include any explanation or text outside the JSON object.
 Ensure you have exactly {n_topics} topics with at least one question each.
 Remember: Today is {current_date}. All dates must be AFTER this date."""
 
-    print(f"Querying {model} to generate {n_topics} topics with up to {k_questions} questions each...")
+    print(
+        f"Querying {model} to generate {n_topics} topics with up to {k_questions} questions each..."
+    )
 
     # Query the LLM
+    # Use higher max_tokens for models with reasoning (like gpt-5)
+    # Reasoning tokens count toward the limit but aren't in the final output
+    max_tokens_to_use = (
+        8000 if "gpt-5" in model or "o1" in model or "o3" in model else 4000
+    )
+
     response_text = query_llm_for_text_openrouter(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         model=model,
         api_key=api_key,
         temperature=temperature,
-        max_tokens=4000
+        max_tokens=max_tokens_to_use,
     )
+
+    # Debug: Check response
+    if response_text is None:
+        raise ValueError("Received None response from API")
+
+    if not response_text.strip():
+        raise ValueError("Received empty response from API")
 
     # Parse the JSON response
     try:
         # Extract JSON from response (in case there's extra text)
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
-        if json_match:
-            json_text = json_match.group(0)
-            result = json.loads(json_text)
+        # Try multiple JSON extraction patterns
+        json_match = re.search(r"\{[\s\S]*\}", response_text, re.DOTALL)
+        if not json_match:
+            # Try with json code blocks
+            json_match = re.search(
+                r"```json\s*(\{[\s\S]*?\})\s*```", response_text, re.DOTALL
+            )
+            if json_match:
+                json_text = json_match.group(1)
+            else:
+                # Try plain code blocks
+                json_match = re.search(
+                    r"```\s*(\{[\s\S]*?\})\s*```", response_text, re.DOTALL
+                )
+                if json_match:
+                    json_text = json_match.group(1)
+                else:
+                    # No JSON found
+                    print(
+                        f"DEBUG: Response text (first 1000 chars):\n{response_text[:1000]}"
+                    )
+                    raise ValueError(
+                        f"No JSON object found in response. Response length: {len(response_text)}"
+                    )
         else:
-            raise ValueError("No JSON object found in response")
+            json_text = json_match.group(0)
+
+        result = json.loads(json_text)
 
         # Validate the result
         if not isinstance(result, dict):
@@ -219,14 +410,32 @@ Remember: Today is {current_date}. All dates must be AFTER this date."""
 
         # Check if we got enough topics
         if len(validated_result) < n_topics:
-            print(f"Warning: Only generated {len(validated_result)} topics out of {n_topics} requested")
+            print(
+                f"Warning: Only generated {len(validated_result)} topics out of {n_topics} requested"
+            )
 
-        print(f"Successfully generated {len(validated_result)} topics with {sum(len(q) for q in validated_result.values())} total questions")
+        print(
+            f"Successfully generated {len(validated_result)} topics with {sum(len(q) for q in validated_result.values())} total questions"
+        )
+
+        # Validate questions to filter out nonsensical or obviously-answered ones
+        if validate_questions_flag:
+            print("Validating questions for logical consistency...")
+            # Extract model base for validation (remove :online suffix)
+            validation_model = model.replace(":online", "")
+            validated_result = validate_questions(
+                validated_result,
+                model=validation_model,
+                api_key=api_key,
+                temperature=0.3,
+            )
 
         return validated_result
 
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse JSON response: {str(e)}\nResponse: {response_text[:500]}")
+        raise ValueError(
+            f"Failed to parse JSON response: {str(e)}\nResponse: {response_text[:500]}"
+        )
     except Exception as e:
         raise Exception(f"Error processing response: {str(e)}")
 
@@ -238,9 +447,9 @@ def print_topics_and_questions(topics: Dict[str, List[str]]) -> None:
     Args:
         topics: Dictionary mapping topics to questions
     """
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("GENERATED TOPICS AND FORECASTING QUESTIONS")
-    print("="*80 + "\n")
+    print("=" * 80 + "\n")
 
     for i, (topic, questions) in enumerate(topics.items(), 1):
         print(f"{i}. {topic}")
@@ -282,8 +491,7 @@ if __name__ == "__main__":
     try:
         # Generate topics and questions
         result = generate_topics_and_questions(
-            n_topics=n_topics,
-            k_questions=k_questions
+            n_topics=n_topics, k_questions=k_questions
         )
 
         # Print results

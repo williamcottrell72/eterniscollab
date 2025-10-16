@@ -12,6 +12,7 @@ import os
 from typing import Optional, List
 from utils import query_llm_for_text
 
+
 def generate_topics():
     """
     Generate a diverse list of 1000 topics across multiple categories.
@@ -121,7 +122,7 @@ def generate_topics():
         "Affirmative Action Supreme Court",
         "Police Reform Efforts",
         "Defund the Police Movement",
-        "Black Lives Matter Protests"
+        "Black Lives Matter Protests",
     ]
     topics.extend(high_interest)
 
@@ -316,7 +317,7 @@ def generate_topics():
         "Rock Climbing Gyms",
         "Bouldering Popularity",
         "Yoga Studio Trends",
-        "Pilates Reformer Classes"
+        "Pilates Reformer Classes",
     ]
     topics.extend(medium_high)
 
@@ -569,7 +570,7 @@ def generate_topics():
         "Smoke Detector Batteries",
         "Fire Safety Home",
         "Electrical Fire Prevention",
-        "Faulty Wiring Signs"
+        "Faulty Wiring Signs",
     ]
     topics.extend(medium)
 
@@ -791,7 +792,7 @@ def generate_topics():
         "Capital Punishment Debate",
         "Innocence Project Work",
         "Wrongful Conviction Cases",
-        "DNA Exoneration Stories"
+        "DNA Exoneration Stories",
     ]
     topics.extend(medium_low)
 
@@ -1043,7 +1044,7 @@ def generate_topics():
         "Anthotype Photography Plant",
         "Alternative Process Photography",
         "Film Photography Revival",
-        "Darkroom Setup Home"
+        "Darkroom Setup Home",
     ]
     topics.extend(low_interest)
 
@@ -1093,7 +1094,7 @@ def generate_topics_with_llm(
     provider: str = "claude",
     api_key: Optional[str] = None,
     model: Optional[str] = None,
-    temperature: float = 0.8
+    temperature: float = 0.8,
 ) -> List[str]:
     """
     Generate diverse topics using an LLM.
@@ -1132,11 +1133,15 @@ def generate_topics_with_llm(
         if provider == "openai":
             api_key = os.environ.get("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("OpenAI API key not provided and OPENAI_API_KEY environment variable not set")
+                raise ValueError(
+                    "OpenAI API key not provided and OPENAI_API_KEY environment variable not set"
+                )
         else:  # claude
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
-                raise ValueError("Anthropic API key not provided and ANTHROPIC_API_KEY environment variable not set")
+                raise ValueError(
+                    "Anthropic API key not provided and ANTHROPIC_API_KEY environment variable not set"
+                )
 
     # Set default model
     if model is None:
@@ -1157,12 +1162,12 @@ def generate_topics_with_llm(
         api_key=api_key,
         model=model,
         temperature=temperature,
-        max_tokens=8000  # Need enough tokens for 1000 topics
+        max_tokens=8000,  # Need enough tokens for 1000 topics
     )
 
     # Parse the response to extract topics
     topics = []
-    for line in response_text.strip().split('\n'):
+    for line in response_text.strip().split("\n"):
         line = line.strip()
         if not line:
             continue
@@ -1170,14 +1175,15 @@ def generate_topics_with_llm(
         # Remove numbering (e.g., "1. Topic Name" -> "Topic Name")
         # Handle various formats: "1.", "1)", "1 -", etc.
         import re
-        match = re.match(r'^\d+[\.\)\-\:]?\s*(.*)', line)
+
+        match = re.match(r"^\d+[\.\)\-\:]?\s*(.*)", line)
         if match:
             topic = match.group(1).strip()
             if topic:
                 topics.append(topic)
         else:
             # Line doesn't start with number, but might still be a topic
-            if line and not line.startswith('#'):
+            if line and not line.startswith("#"):
                 topics.append(line)
 
     print(f"Successfully extracted {len(topics)} topics from LLM response")
@@ -1189,7 +1195,7 @@ def generate_topics_with_llm_openrouter(
     n_topics: int = 1000,
     model: str = "anthropic/claude-sonnet-4",
     api_key: Optional[str] = None,
-    temperature: float = 0.8
+    temperature: float = 0.8,
 ) -> List[str]:
     """
     Generate diverse topics using an LLM via OpenRouter.
@@ -1219,7 +1225,9 @@ def generate_topics_with_llm_openrouter(
     if api_key is None:
         api_key = os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
-            raise ValueError("OpenRouter API key not provided and OPENROUTER_API_KEY environment variable not set")
+            raise ValueError(
+                "OpenRouter API key not provided and OPENROUTER_API_KEY environment variable not set"
+            )
 
     # Generate system and user prompts
     system_prompt = """You are a helpful assistant that generates diverse lists of topics spanning multiple categories and interest levels. You follow instructions precisely and return only the requested output format."""
@@ -1230,18 +1238,19 @@ def generate_topics_with_llm_openrouter(
 
     # Query via OpenRouter
     from utils import query_llm_for_text_openrouter
+
     response_text = query_llm_for_text_openrouter(
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         model=model,
         api_key=api_key,
         temperature=temperature,
-        max_tokens=8000  # Need enough tokens for 1000 topics
+        max_tokens=8000,  # Need enough tokens for 1000 topics
     )
 
     # Parse the response to extract topics
     topics = []
-    for line in response_text.strip().split('\n'):
+    for line in response_text.strip().split("\n"):
         line = line.strip()
         if not line:
             continue
@@ -1249,14 +1258,15 @@ def generate_topics_with_llm_openrouter(
         # Remove numbering (e.g., "1. Topic Name" -> "Topic Name")
         # Handle various formats: "1.", "1)", "1 -", etc.
         import re
-        match = re.match(r'^\d+[\.\)\-\:]?\s*(.*)', line)
+
+        match = re.match(r"^\d+[\.\)\-\:]?\s*(.*)", line)
         if match:
             topic = match.group(1).strip()
             if topic:
                 topics.append(topic)
         else:
             # Line doesn't start with number, but might still be a topic
-            if line and not line.startswith('#'):
+            if line and not line.startswith("#"):
                 topics.append(line)
 
     print(f"Successfully extracted {len(topics)} topics from LLM response")
@@ -1268,7 +1278,7 @@ def rank_topics_by_interest(topics):
     return [(rank + 1, topic) for rank, topic in enumerate(topics)]
 
 
-def save_to_csv(ranked_topics, filename='topic_rankings.csv'):
+def save_to_csv(ranked_topics, filename="topic_rankings.csv"):
     """
     Save ranked topics to CSV file.
 
@@ -1276,9 +1286,9 @@ def save_to_csv(ranked_topics, filename='topic_rankings.csv'):
         ranked_topics: List of (rank, topic) tuples
         filename: Output CSV filename
     """
-    with open(filename, 'w', newline='', encoding='utf-8') as f:
+    with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(['rank', 'topic'])
+        writer.writerow(["rank", "topic"])
         for rank, topic in ranked_topics:
             writer.writerow([rank, topic])
 
