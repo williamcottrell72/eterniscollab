@@ -8,7 +8,7 @@ import sys
 import asyncio
 
 # Add parent directory to path to import probability_estimator
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from probability_estimator import reword_prompt
 
@@ -36,7 +36,7 @@ class TestRewordOpenAI:
         """Test that function raises error when API key is not available."""
         original = "Will Kamala Harris run for president again?"
         # Temporarily remove env variable if it exists
-        old_key = os.environ.pop('OPENROUTER_API_KEY', None)
+        old_key = os.environ.pop("OPENROUTER_API_KEY", None)
 
         try:
             with pytest.raises(ValueError, match="OpenRouter API key not provided"):
@@ -44,7 +44,7 @@ class TestRewordOpenAI:
         finally:
             # Restore env variable if it existed
             if old_key:
-                os.environ['OPENROUTER_API_KEY'] = old_key
+                os.environ["OPENROUTER_API_KEY"] = old_key
 
     @pytest.mark.asyncio
     async def test_returns_string(self, openrouter_api_key):
@@ -55,7 +55,7 @@ class TestRewordOpenAI:
             original,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
         assert isinstance(result, str)
         assert len(result) > 0
@@ -69,7 +69,7 @@ class TestRewordOpenAI:
             original,
             temperature=0.1,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
 
         # Check that key terms are preserved
@@ -85,7 +85,7 @@ class TestRewordOpenAI:
             original,
             temperature=0.9,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
 
         # Result should still be a valid question string
@@ -106,7 +106,7 @@ class TestRewordOpenAI:
                 original,
                 temperature=0.7,
                 api_key=openrouter_api_key,
-                model="openai/gpt-4o-mini"
+                model="openai/gpt-4o-mini",
             )
             results.append(result)
 
@@ -143,7 +143,7 @@ class TestRewordClaude:
             original,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="anthropic/claude-3.5-sonnet"
+            model="anthropic/claude-3.5-sonnet",
         )
         assert isinstance(result, str)
         assert len(result) > 0
@@ -157,7 +157,7 @@ class TestRewordClaude:
             original,
             temperature=0.1,
             api_key=openrouter_api_key,
-            model="anthropic/claude-3.5-sonnet"
+            model="anthropic/claude-3.5-sonnet",
         )
 
         # Check that key terms are preserved
@@ -173,7 +173,7 @@ class TestRewordClaude:
             original,
             temperature=0.9,
             api_key=openrouter_api_key,
-            model="anthropic/claude-3.5-sonnet"
+            model="anthropic/claude-3.5-sonnet",
         )
 
         # Result should still be a valid question string
@@ -193,7 +193,7 @@ class TestRewordClaude:
                 original,
                 temperature=0.7,
                 api_key=openrouter_api_key,
-                model="anthropic/claude-3.5-sonnet"
+                model="anthropic/claude-3.5-sonnet",
             )
             results.append(result)
 
@@ -234,13 +234,13 @@ class TestRewordComparison:
             original,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
         claude_result = await reword_prompt(
             original,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="anthropic/claude-3.5-sonnet"
+            model="anthropic/claude-3.5-sonnet",
         )
 
         assert isinstance(openai_result, str)
@@ -277,7 +277,7 @@ class TestRewordEdgeCases:
             long_prompt,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
         assert isinstance(result, str)
         assert len(result) > 0
@@ -285,7 +285,9 @@ class TestRewordEdgeCases:
     @pytest.mark.asyncio
     async def test_special_characters_in_prompt(self):
         """Test handling of special characters."""
-        special_prompt = "Will Kamala Harris run for president again? (2028 election) [yes/no]"
+        special_prompt = (
+            "Will Kamala Harris run for president again? (2028 election) [yes/no]"
+        )
 
         # At temperature 0, should return unchanged
         assert await reword_prompt(special_prompt, temperature=0) == special_prompt
@@ -299,7 +301,7 @@ class TestRewordEdgeCases:
             statement,
             temperature=0.5,
             api_key=openrouter_api_key,
-            model="openai/gpt-4o-mini"
+            model="openai/gpt-4o-mini",
         )
         assert isinstance(result, str)
         assert len(result) > 0

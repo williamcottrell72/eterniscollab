@@ -119,7 +119,7 @@ class TestOpenRouterModels:
             prompt=TEST_QUESTION,
             model="openai/gpt-4o-mini",
             n_samples=2,
-            knowledge_cutoff_date="January 2024"
+            knowledge_cutoff_date="January 2024",
         )
 
         # Verify cutoff date is stored
@@ -246,7 +246,7 @@ class TestOpenRouterComparison:
         # Print comparison
         print(f"\n{'=' * 80}")
         print("Model Comparison")
-        print('=' * 80)
+        print("=" * 80)
         print(f"Question: {TEST_QUESTION}\n")
 
         for model, result in results.items():
@@ -322,7 +322,9 @@ class TestOpenRouterModelsConstant:
         """Test that all models follow 'provider/model-name' format."""
         for model in OPENROUTER_MODELS:
             assert isinstance(model, str)
-            assert "/" in model, f"Model '{model}' should have format 'provider/model-name'"
+            assert (
+                "/" in model
+            ), f"Model '{model}' should have format 'provider/model-name'"
 
             provider, model_name = model.split("/", 1)
             assert len(provider) > 0, f"Provider in '{model}' is empty"
@@ -337,7 +339,9 @@ class TestOpenRouterModelsConstant:
 
         print(f"\nAvailable providers in OPENROUTER_MODELS:")
         for provider in sorted(providers):
-            provider_models = [m for m in OPENROUTER_MODELS if m.startswith(provider + "/")]
+            provider_models = [
+                m for m in OPENROUTER_MODELS if m.startswith(provider + "/")
+            ]
             print(f"  {provider}: {len(provider_models)} models")
 
 

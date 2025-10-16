@@ -87,12 +87,19 @@ class TestExtractNumericValue:
         assert extract_numeric_value("Estimated at 3/4") == 0.75
 
         # Sentence formats
-        assert extract_numeric_value("I estimate the probability to be around 30%") == 0.3
+        assert (
+            extract_numeric_value("I estimate the probability to be around 30%") == 0.3
+        )
         assert extract_numeric_value("The score would be approximately 0.65") == 0.65
-        assert extract_numeric_value("About 1/3 of the time") == pytest.approx(0.333, abs=0.001)
+        assert extract_numeric_value("About 1/3 of the time") == pytest.approx(
+            0.333, abs=0.001
+        )
 
         # Multiple formats in one response
-        assert extract_numeric_value("While some say 80%, I think 0.6 is more accurate") == 0.8
+        assert (
+            extract_numeric_value("While some say 80%, I think 0.6 is more accurate")
+            == 0.8
+        )
 
 
 if __name__ == "__main__":

@@ -12,7 +12,11 @@ from unittest.mock import patch, MagicMock
 # Add parent directory to path to import topic_generator
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from topic_generator import generate_topics_and_questions, print_topics_and_questions
+from topic_generator import (
+    generate_topics_and_questions,
+    print_topics_and_questions,
+    validate_questions,
+)
 
 
 class TestGenerateTopicsAndQuestions:
@@ -44,15 +48,20 @@ class TestGenerateTopicsAndQuestions:
 
     def test_basic_functionality_n2_k1(self, mock_api_key, sample_llm_response):
         """Test basic functionality with N=2 topics and k=1 question (as requested)."""
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = sample_llm_response
+        validation_response = '{"remove": []}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            # First call for generation, second for validation
+            mock_query.side_effect = [sample_llm_response, validation_response]
 
             result = generate_topics_and_questions(n_topics=2, k_questions=1)
 
-            # Verify the function was called with correct parameters
-            mock_query.assert_called_once()
-            call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['api_key'] == mock_api_key
+            # Verify the function was called twice (generation + validation)
+            assert mock_query.call_count == 2
+
+            # Check first call (generation) parameters
+            first_call_kwargs = mock_query.call_args_list[0][1]
+            assert first_call_kwargs["api_key"] == mock_api_key
 
             # Verify result structure
             assert isinstance(result, dict)
@@ -105,7 +114,7 @@ class TestGenerateTopicsAndQuestions:
             ]
         }"""
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(n_topics=1, k_questions=3)
@@ -126,7 +135,7 @@ class TestGenerateTopicsAndQuestions:
             ]
         }"""
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             # Request only 2 questions per topic
@@ -146,7 +155,7 @@ class TestGenerateTopicsAndQuestions:
 
 I hope this helps!"""
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(n_topics=1, k_questions=1)
@@ -156,7 +165,7 @@ I hope this helps!"""
 
     def test_invalid_json_response(self, mock_api_key):
         """Test that invalid JSON raises appropriate error."""
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = "This is not JSON at all"
 
             with pytest.raises(Exception, match="Error processing response"):
@@ -164,7 +173,7 @@ I hope this helps!"""
 
     def test_malformed_json_response(self, mock_api_key):
         """Test that malformed JSON raises appropriate error."""
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = '{"topic": ["question",]}'  # Trailing comma
 
             with pytest.raises(ValueError, match="Failed to parse JSON response"):
@@ -172,7 +181,7 @@ I hope this helps!"""
 
     def test_empty_response(self, mock_api_key):
         """Test handling of empty JSON response."""
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = "{}"
 
             result = generate_topics_and_questions(n_topics=1, k_questions=1)
@@ -189,7 +198,7 @@ I hope this helps!"""
             "Topic Without Questions": []
         }"""
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(n_topics=2, k_questions=1)
@@ -201,108 +210,106 @@ I hope this helps!"""
     def test_custom_model_parameter(self, mock_api_key):
         """Test using a custom model parameter."""
         response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = response
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.side_effect = [response, validation_response]
 
             result = generate_topics_and_questions(
-                n_topics=1,
-                k_questions=1,
-                model="anthropic/claude-sonnet-4"
+                n_topics=1, k_questions=1, model="anthropic/claude-sonnet-4"
             )
 
             # Verify the custom model was used (with :online suffix added automatically)
-            call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['model'] == "anthropic/claude-sonnet-4:online"
+            first_call_kwargs = mock_query.call_args_list[0][1]
+            assert first_call_kwargs["model"] == "anthropic/claude-sonnet-4:online"
 
     def test_custom_temperature_parameter(self, mock_api_key):
         """Test using a custom temperature parameter."""
         response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = response
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.side_effect = [response, validation_response]
 
             result = generate_topics_and_questions(
-                n_topics=1,
-                k_questions=1,
-                temperature=0.9
+                n_topics=1, k_questions=1, temperature=0.9
             )
 
-            # Verify the custom temperature was used
-            call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['temperature'] == 0.9
+            # Verify the custom temperature was used in generation call
+            first_call_kwargs = mock_query.call_args_list[0][1]
+            assert first_call_kwargs["temperature"] == 0.9
 
     def test_web_search_enabled_by_default(self, mock_api_key):
         """Test that web search (:online) is enabled by default."""
         response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = response
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.side_effect = [response, validation_response]
 
             result = generate_topics_and_questions(
                 n_topics=1,
                 k_questions=1,
-                model="openai/gpt-4o-mini"  # Without :online suffix
+                model="openai/gpt-4o-mini",  # Without :online suffix
             )
 
-            # Verify :online was automatically added
-            call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['model'].endswith(":online")
-            assert call_kwargs['model'] == "openai/gpt-4o-mini:online"
+            # Verify :online was automatically added in generation call
+            first_call_kwargs = mock_query.call_args_list[0][1]
+            assert first_call_kwargs["model"].endswith(":online")
+            assert first_call_kwargs["model"] == "openai/gpt-4o-mini:online"
 
     def test_web_search_can_be_disabled(self, mock_api_key):
         """Test that web search can be disabled."""
         response = '{"Topic": ["Question?"]}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(
                 n_topics=1,
                 k_questions=1,
                 model="openai/gpt-4o-mini",
-                enable_web_search=False
+                enable_web_search=False,
             )
 
             # Verify :online was NOT added
             call_kwargs = mock_query.call_args[1]
-            assert not call_kwargs['model'].endswith(":online")
-            assert call_kwargs['model'] == "openai/gpt-4o-mini"
+            assert not call_kwargs["model"].endswith(":online")
+            assert call_kwargs["model"] == "openai/gpt-4o-mini"
 
     def test_web_search_not_duplicated(self, mock_api_key):
         """Test that :online suffix is not duplicated if already present."""
         response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = response
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.side_effect = [response, validation_response]
 
             result = generate_topics_and_questions(
                 n_topics=1,
                 k_questions=1,
-                model="openai/gpt-4o-mini:online"  # Already has :online
+                model="openai/gpt-4o-mini:online",  # Already has :online
             )
 
-            # Verify :online was not duplicated
-            call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['model'] == "openai/gpt-4o-mini:online"
-            assert call_kwargs['model'].count(":online") == 1
+            # Verify :online was not duplicated in generation call
+            first_call_kwargs = mock_query.call_args_list[0][1]
+            assert first_call_kwargs["model"] == "openai/gpt-4o-mini:online"
+            assert first_call_kwargs["model"].count(":online") == 1
 
     def test_explicit_api_key(self):
         """Test providing API key explicitly."""
         response = '{"Topic": ["Question?"]}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(
-                n_topics=1,
-                k_questions=1,
-                api_key="explicit-key-123"
+                n_topics=1, k_questions=1, api_key="explicit-key-123"
             )
 
             # Verify the explicit key was used
             call_kwargs = mock_query.call_args[1]
-            assert call_kwargs['api_key'] == "explicit-key-123"
+            assert call_kwargs["api_key"] == "explicit-key-123"
 
     def test_non_string_questions_filtered(self, mock_api_key):
         """Test that non-string questions are filtered out."""
@@ -315,7 +322,7 @@ I hope this helps!"""
             ]
         }"""
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
             mock_query.return_value = response
 
             result = generate_topics_and_questions(n_topics=1, k_questions=5)
@@ -329,11 +336,9 @@ I hope this helps!"""
         topics = {
             "AI Safety": [
                 "Will AGI be developed by 2030?",
-                "Will AI alignment be solved by 2028?"
+                "Will AI alignment be solved by 2028?",
             ],
-            "Climate": [
-                "Will net-zero be achieved by 2050?"
-            ]
+            "Climate": ["Will net-zero be achieved by 2050?"],
         }
 
         print_topics_and_questions(topics)
@@ -347,16 +352,17 @@ I hope this helps!"""
     def test_prompt_includes_diversity_requirements(self, mock_api_key):
         """Test that the prompt includes topic diversity requirements."""
         response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
 
-        with patch('topic_generator.query_llm_for_text_openrouter') as mock_query:
-            mock_query.return_value = response
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.side_effect = [response, validation_response]
 
             result = generate_topics_and_questions(n_topics=2, k_questions=1)
 
-            # Verify the prompt includes diversity requirements
-            call_args = mock_query.call_args
-            system_prompt = call_args[1]['system_prompt']
-            user_prompt = call_args[1]['user_prompt']
+            # Verify the prompt includes diversity requirements (check generation call)
+            first_call_args = mock_query.call_args_list[0]
+            system_prompt = first_call_args[1]["system_prompt"]
+            user_prompt = first_call_args[1]["user_prompt"]
 
             # Check system prompt mentions diversity
             assert "DIVERSE" in system_prompt or "different domains" in system_prompt
@@ -366,13 +372,140 @@ I hope this helps!"""
             assert "AI Governance" in user_prompt
             assert "DUPLICATE" in user_prompt or "BAD" in user_prompt
 
+    def test_validation_disabled(self, mock_api_key):
+        """Test that validation can be disabled."""
+        response = '{"Topic": ["Question?"]}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.return_value = response
+
+            result = generate_topics_and_questions(
+                n_topics=1, k_questions=1, validate_questions_flag=False
+            )
+
+            # Verify validation was not called (only one call to LLM for generation)
+            assert mock_query.call_count == 1
+
+    def test_validation_enabled_by_default(self, mock_api_key):
+        """Test that validation is enabled by default."""
+        generation_response = '{"Topic": ["Question?"]}'
+        validation_response = '{"remove": []}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            # First call is for generation, second call is for validation
+            mock_query.side_effect = [generation_response, validation_response]
+
+            result = generate_topics_and_questions(n_topics=1, k_questions=1)
+
+            # Verify validation was called (two calls total)
+            assert mock_query.call_count == 2
+
+
+class TestValidateQuestions:
+    """Test suite for validate_questions function."""
+
+    @pytest.fixture
+    def mock_api_key(self):
+        """Fixture to set a mock API key."""
+        original_key = os.environ.get("OPENROUTER_API_KEY")
+        os.environ["OPENROUTER_API_KEY"] = "test-key-12345"
+        yield "test-key-12345"
+        # Cleanup
+        if original_key is None:
+            os.environ.pop("OPENROUTER_API_KEY", None)
+        else:
+            os.environ["OPENROUTER_API_KEY"] = original_key
+
+    def test_validate_removes_outdated_questions(self, mock_api_key):
+        """Test that validation removes questions with outdated contexts."""
+        topics = {
+            "US Politics": [
+                "Will the Biden administration achieve a 50% reduction in emissions by 2030?",
+                "Will the US Congress pass infrastructure legislation by 2026?",
+            ]
+        }
+
+        # Mock validation response indicating first question should be removed
+        validation_response = '{"remove": [1]}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.return_value = validation_response
+
+            result = validate_questions(topics, api_key=mock_api_key)
+
+            # First question should be removed
+            assert len(result["US Politics"]) == 1
+            assert "Biden administration" not in result["US Politics"][0]
+            assert "infrastructure legislation" in result["US Politics"][0]
+
+    def test_validate_removes_all_invalid_questions(self, mock_api_key):
+        """Test that topics with all invalid questions are removed entirely."""
+        topics = {
+            "Past Events": [
+                "Will the 2024 election happen by November 2024?",
+                "Will the Olympics occur in 2024?",
+            ],
+            "Future Events": ["Will humans land on Mars by 2030?"],
+        }
+
+        # Mock validation response indicating all questions in first topic should be removed
+        validation_response = '{"remove": [1, 2]}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.return_value = validation_response
+
+            result = validate_questions(topics, api_key=mock_api_key)
+
+            # First topic should be completely removed
+            assert "Past Events" not in result
+            # Second topic should remain
+            assert "Future Events" in result
+            assert len(result["Future Events"]) == 1
+
+    def test_validate_keeps_all_valid_questions(self, mock_api_key):
+        """Test that validation keeps all questions when none are invalid."""
+        topics = {
+            "Future Tech": [
+                "Will AGI be developed by 2030?",
+                "Will quantum computers break RSA encryption by 2028?",
+            ]
+        }
+
+        # Mock validation response indicating no questions should be removed
+        validation_response = '{"remove": []}'
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.return_value = validation_response
+
+            result = validate_questions(topics, api_key=mock_api_key)
+
+            # All questions should remain
+            assert len(result) == 1
+            assert "Future Tech" in result
+            assert len(result["Future Tech"]) == 2
+
+    def test_validate_handles_parsing_errors(self, mock_api_key):
+        """Test that validation handles parsing errors gracefully."""
+        topics = {"Test Topic": ["Test question?"]}
+
+        # Mock validation response that cannot be parsed
+        validation_response = "This is not JSON"
+
+        with patch("topic_generator.query_llm_for_text_openrouter") as mock_query:
+            mock_query.return_value = validation_response
+
+            result = validate_questions(topics, api_key=mock_api_key)
+
+            # Should keep all questions when validation fails
+            assert result == topics
+
 
 class TestIntegration:
     """Integration tests that may call the actual API."""
 
     @pytest.mark.skipif(
         not os.environ.get("OPENROUTER_API_KEY"),
-        reason="OPENROUTER_API_KEY not set - skipping integration test"
+        reason="OPENROUTER_API_KEY not set - skipping integration test",
     )
     def test_real_api_call_n2_k1(self):
         """Integration test with real API call (N=2, k=1 as requested)."""
@@ -380,7 +513,9 @@ class TestIntegration:
 
         # Basic validation
         assert isinstance(result, dict)
-        assert len(result) >= 1  # At least 1 topic (may be less than 2 if LLM struggles)
+        assert (
+            len(result) >= 1
+        )  # At least 1 topic (may be less than 2 if LLM struggles)
 
         for topic, questions in result.items():
             assert isinstance(topic, str)

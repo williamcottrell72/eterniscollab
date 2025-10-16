@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from probability_estimator import (
     query_openai_probability,
     query_claude_probability,
-    get_probability_estimate
+    get_probability_estimate,
 )
 from utils import extract_numeric_value
 
@@ -61,9 +61,7 @@ class TestOpenAIProbability:
     def test_query_openai_with_kamala_prompt(self, openai_api_key):
         """Test OpenAI probability estimation with the Kamala Harris prompt."""
         probability = query_openai_probability(
-            prompt=TEST_PROMPT,
-            api_key=openai_api_key,
-            model="gpt-4"
+            prompt=TEST_PROMPT, api_key=openai_api_key, model="gpt-4"
         )
 
         # Assert the probability is a valid float between 0 and 1
@@ -76,9 +74,7 @@ class TestOpenAIProbability:
     def test_query_openai_with_gpt4_turbo(self, openai_api_key):
         """Test OpenAI with GPT-4 Turbo model."""
         probability = query_openai_probability(
-            prompt=TEST_PROMPT,
-            api_key=openai_api_key,
-            model="gpt-4-turbo-preview"
+            prompt=TEST_PROMPT, api_key=openai_api_key, model="gpt-4-turbo-preview"
         )
 
         assert isinstance(probability, float)
@@ -89,13 +85,12 @@ class TestOpenAIProbability:
         """Test that invalid API key raises exception."""
         with pytest.raises((Exception, ImportError)) as exc_info:
             query_openai_probability(
-                prompt=TEST_PROMPT,
-                api_key="invalid_key",
-                model="gpt-4"
+                prompt=TEST_PROMPT, api_key="invalid_key", model="gpt-4"
             )
         # Accept either API error or ImportError if openai package not installed
-        assert ("API call failed" in str(exc_info.value) or
-                "not installed" in str(exc_info.value))
+        assert "API call failed" in str(exc_info.value) or "not installed" in str(
+            exc_info.value
+        )
 
 
 class TestClaudeProbability:
@@ -114,7 +109,7 @@ class TestClaudeProbability:
         probability = query_claude_probability(
             prompt=TEST_PROMPT,
             api_key=anthropic_api_key,
-            model="claude-sonnet-4-5-20250929"
+            model="claude-sonnet-4-5-20250929",
         )
 
         # Assert the probability is a valid float between 0 and 1
@@ -129,7 +124,7 @@ class TestClaudeProbability:
         probability = query_claude_probability(
             prompt=TEST_PROMPT,
             api_key=anthropic_api_key,
-            model="claude-3-5-haiku-20241022"
+            model="claude-3-5-haiku-20241022",
         )
 
         assert isinstance(probability, float)
@@ -142,7 +137,7 @@ class TestClaudeProbability:
             query_claude_probability(
                 prompt=TEST_PROMPT,
                 api_key="invalid_key",
-                model="claude-sonnet-4-5-20250929"
+                model="claude-sonnet-4-5-20250929",
             )
         assert "API call failed" in str(exc_info.value)
 
@@ -169,9 +164,7 @@ class TestUnifiedInterface:
     def test_unified_openai(self, openai_api_key):
         """Test unified interface with OpenAI provider."""
         result = get_probability_estimate(
-            prompt=TEST_PROMPT,
-            provider="openai",
-            api_key=openai_api_key
+            prompt=TEST_PROMPT, provider="openai", api_key=openai_api_key
         )
 
         assert isinstance(result, dict)
@@ -186,9 +179,7 @@ class TestUnifiedInterface:
     def test_unified_claude(self, anthropic_api_key):
         """Test unified interface with Claude provider."""
         result = get_probability_estimate(
-            prompt=TEST_PROMPT,
-            provider="claude",
-            api_key=anthropic_api_key
+            prompt=TEST_PROMPT, provider="claude", api_key=anthropic_api_key
         )
 
         assert isinstance(result, dict)
@@ -204,9 +195,7 @@ class TestUnifiedInterface:
         """Test that invalid provider raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
             get_probability_estimate(
-                prompt=TEST_PROMPT,
-                provider="invalid",
-                api_key=openai_api_key
+                prompt=TEST_PROMPT, provider="invalid", api_key=openai_api_key
             )
         assert "must be either 'openai' or 'claude'" in str(exc_info.value)
 
@@ -220,9 +209,7 @@ class TestUnifiedInterface:
         try:
             with pytest.raises(ValueError) as exc_info:
                 get_probability_estimate(
-                    prompt=TEST_PROMPT,
-                    provider="openai",
-                    api_key=None
+                    prompt=TEST_PROMPT, provider="openai", api_key=None
                 )
             assert "API key not provided" in str(exc_info.value)
         finally:
@@ -241,7 +228,9 @@ class TestComparisonBetweenProviders:
         anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
 
         if not openai_key or not anthropic_key:
-            pytest.skip("Both OPENAI_API_KEY and ANTHROPIC_API_KEY must be set for comparison tests")
+            pytest.skip(
+                "Both OPENAI_API_KEY and ANTHROPIC_API_KEY must be set for comparison tests"
+            )
 
         return openai_key, anthropic_key
 
@@ -251,29 +240,31 @@ class TestComparisonBetweenProviders:
 
         # Get OpenAI estimate
         openai_result = get_probability_estimate(
-            prompt=TEST_PROMPT,
-            provider="openai",
-            api_key=openai_key
+            prompt=TEST_PROMPT, provider="openai", api_key=openai_key
         )
 
         # Get Claude estimate
         claude_result = get_probability_estimate(
-            prompt=TEST_PROMPT,
-            provider="claude",
-            api_key=anthropic_key
+            prompt=TEST_PROMPT, provider="claude", api_key=anthropic_key
         )
 
         # Print comparison
-        print("\n" + "="*60)
+        print("\n" + "=" * 60)
         print("PROBABILITY ESTIMATE COMPARISON")
-        print("="*60)
+        print("=" * 60)
         print(f"Prompt: {TEST_PROMPT}")
         print(f"\nOpenAI ({openai_result['model']}):")
-        print(f"  Probability: {openai_result['probability']:.2%} ({openai_result['probability']:.3f})")
+        print(
+            f"  Probability: {openai_result['probability']:.2%} ({openai_result['probability']:.3f})"
+        )
         print(f"\nClaude ({claude_result['model']}):")
-        print(f"  Probability: {claude_result['probability']:.2%} ({claude_result['probability']:.3f})")
-        print(f"\nDifference: {abs(openai_result['probability'] - claude_result['probability']):.2%}")
-        print("="*60)
+        print(
+            f"  Probability: {claude_result['probability']:.2%} ({claude_result['probability']:.3f})"
+        )
+        print(
+            f"\nDifference: {abs(openai_result['probability'] - claude_result['probability']):.2%}"
+        )
+        print("=" * 60)
 
         # Both should be valid probabilities
         assert 0.0 <= openai_result["probability"] <= 1.0

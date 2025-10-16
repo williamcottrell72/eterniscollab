@@ -16,7 +16,7 @@ from buzz import (
     query_claude_interest,
     query_openai_divisiveness,
     query_claude_divisiveness,
-    get_buzz_score
+    get_buzz_score,
 )
 from utils import extract_numeric_value
 
@@ -73,10 +73,7 @@ class TestOpenAIInterest:
 
     def test_query_high_interest_topic(self, openai_api_key):
         """Test OpenAI interest estimation with a high-interest topic."""
-        score = query_openai_interest(
-            topic=HIGH_INTEREST_TOPIC,
-            api_key=openai_api_key
-        )
+        score = query_openai_interest(topic=HIGH_INTEREST_TOPIC, api_key=openai_api_key)
 
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
@@ -84,10 +81,7 @@ class TestOpenAIInterest:
 
     def test_query_low_interest_topic(self, openai_api_key):
         """Test OpenAI interest estimation with a low-interest topic."""
-        score = query_openai_interest(
-            topic=LOW_INTEREST_TOPIC,
-            api_key=openai_api_key
-        )
+        score = query_openai_interest(topic=LOW_INTEREST_TOPIC, api_key=openai_api_key)
 
         assert isinstance(score, float)
         assert 0.0 <= score <= 1.0
@@ -108,8 +102,7 @@ class TestClaudeInterest:
     def test_query_high_interest_topic(self, anthropic_api_key):
         """Test Claude interest estimation with a high-interest topic."""
         score = query_claude_interest(
-            topic=HIGH_INTEREST_TOPIC,
-            api_key=anthropic_api_key
+            topic=HIGH_INTEREST_TOPIC, api_key=anthropic_api_key
         )
 
         assert isinstance(score, float)
@@ -119,8 +112,7 @@ class TestClaudeInterest:
     def test_query_low_interest_topic(self, anthropic_api_key):
         """Test Claude interest estimation with a low-interest topic."""
         score = query_claude_interest(
-            topic=LOW_INTEREST_TOPIC,
-            api_key=anthropic_api_key
+            topic=LOW_INTEREST_TOPIC, api_key=anthropic_api_key
         )
 
         assert isinstance(score, float)
@@ -142,8 +134,7 @@ class TestOpenAIDivisiveness:
     def test_query_high_divisive_topic(self, openai_api_key):
         """Test OpenAI divisiveness estimation with a divisive topic."""
         score = query_openai_divisiveness(
-            topic=HIGH_DIVISIVE_TOPIC,
-            api_key=openai_api_key
+            topic=HIGH_DIVISIVE_TOPIC, api_key=openai_api_key
         )
 
         assert isinstance(score, float)
@@ -153,8 +144,7 @@ class TestOpenAIDivisiveness:
     def test_query_low_divisive_topic(self, openai_api_key):
         """Test OpenAI divisiveness estimation with a non-divisive topic."""
         score = query_openai_divisiveness(
-            topic=LOW_DIVISIVE_TOPIC,
-            api_key=openai_api_key
+            topic=LOW_DIVISIVE_TOPIC, api_key=openai_api_key
         )
 
         assert isinstance(score, float)
@@ -176,8 +166,7 @@ class TestClaudeDivisiveness:
     def test_query_high_divisive_topic(self, anthropic_api_key):
         """Test Claude divisiveness estimation with a divisive topic."""
         score = query_claude_divisiveness(
-            topic=HIGH_DIVISIVE_TOPIC,
-            api_key=anthropic_api_key
+            topic=HIGH_DIVISIVE_TOPIC, api_key=anthropic_api_key
         )
 
         assert isinstance(score, float)
@@ -187,8 +176,7 @@ class TestClaudeDivisiveness:
     def test_query_low_divisive_topic(self, anthropic_api_key):
         """Test Claude divisiveness estimation with a non-divisive topic."""
         score = query_claude_divisiveness(
-            topic=LOW_DIVISIVE_TOPIC,
-            api_key=anthropic_api_key
+            topic=LOW_DIVISIVE_TOPIC, api_key=anthropic_api_key
         )
 
         assert isinstance(score, float)
@@ -218,9 +206,7 @@ class TestBuzzScore:
     def test_buzz_score_openai(self, openai_api_key):
         """Test unified buzz score with OpenAI."""
         result = get_buzz_score(
-            topic=HIGH_DIVISIVE_TOPIC,
-            provider="openai",
-            api_key=openai_api_key
+            topic=HIGH_DIVISIVE_TOPIC, provider="openai", api_key=openai_api_key
         )
 
         assert isinstance(result, dict)
@@ -249,9 +235,7 @@ class TestBuzzScore:
     def test_buzz_score_claude(self, anthropic_api_key):
         """Test unified buzz score with Claude."""
         result = get_buzz_score(
-            topic=HIGH_DIVISIVE_TOPIC,
-            provider="claude",
-            api_key=anthropic_api_key
+            topic=HIGH_DIVISIVE_TOPIC, provider="claude", api_key=anthropic_api_key
         )
 
         assert isinstance(result, dict)
@@ -274,9 +258,7 @@ class TestBuzzScore:
         """Test that invalid provider raises ValueError."""
         with pytest.raises(ValueError) as exc_info:
             get_buzz_score(
-                topic=HIGH_DIVISIVE_TOPIC,
-                provider="invalid",
-                api_key=openai_api_key
+                topic=HIGH_DIVISIVE_TOPIC, provider="invalid", api_key=openai_api_key
             )
         assert "must be either 'openai' or 'claude'" in str(exc_info.value)
 
@@ -303,41 +285,41 @@ class TestBuzzComparison:
             HIGH_INTEREST_TOPIC,
             LOW_INTEREST_TOPIC,
             HIGH_DIVISIVE_TOPIC,
-            LOW_DIVISIVE_TOPIC
+            LOW_DIVISIVE_TOPIC,
         ]
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("BUZZ SCORE COMPARISON")
-        print("="*80)
+        print("=" * 80)
 
         for topic in topics:
             # Get OpenAI score
             openai_result = get_buzz_score(
-                topic=topic,
-                provider="openai",
-                api_key=openai_key
+                topic=topic, provider="openai", api_key=openai_key
             )
 
             # Get Claude score
             claude_result = get_buzz_score(
-                topic=topic,
-                provider="claude",
-                api_key=anthropic_key
+                topic=topic, provider="claude", api_key=anthropic_key
             )
 
             print(f"\nTopic: {topic}")
-            print(f"  OpenAI  - Interest: {openai_result['interest']:.3f}, "
-                  f"Divisiveness: {openai_result['divisiveness']:.3f}, "
-                  f"Buzz: {openai_result['buzz']:.3f}")
-            print(f"  Claude  - Interest: {claude_result['interest']:.3f}, "
-                  f"Divisiveness: {claude_result['divisiveness']:.3f}, "
-                  f"Buzz: {claude_result['buzz']:.3f}")
+            print(
+                f"  OpenAI  - Interest: {openai_result['interest']:.3f}, "
+                f"Divisiveness: {openai_result['divisiveness']:.3f}, "
+                f"Buzz: {openai_result['buzz']:.3f}"
+            )
+            print(
+                f"  Claude  - Interest: {claude_result['interest']:.3f}, "
+                f"Divisiveness: {claude_result['divisiveness']:.3f}, "
+                f"Buzz: {claude_result['buzz']:.3f}"
+            )
 
             # Both should be valid scores
             assert 0.0 <= openai_result["buzz"] <= 1.0
             assert 0.0 <= claude_result["buzz"] <= 1.0
 
-        print("="*80)
+        print("=" * 80)
 
 
 if __name__ == "__main__":
