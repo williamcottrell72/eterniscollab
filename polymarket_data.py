@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
 from pathlib import Path
 import pandas as pd
+from utils import data_dir as get_data_dir
 
 
 # API Base URLs
@@ -183,7 +184,7 @@ def download_polymarket_prices(
     start_date: datetime,
     end_date: datetime,
     fidelity: int = 1,
-    data_dir: str = "data/polymarket",
+    data_dir: str = None,
     overwrite: bool = False,
 ) -> pd.DataFrame:
     """
@@ -201,7 +202,7 @@ def download_polymarket_prices(
         start_date: Start date for historical data
         end_date: End date for historical data
         fidelity: Data resolution in minutes (default: 1 for minute bars)
-        data_dir: Directory to store cached data (default: "data/polymarket")
+        data_dir: Directory to store cached data (default: None, uses data_dir() / 'polymarket')
         overwrite: If True, download even if cached data exists (default: False)
 
     Returns:
@@ -220,6 +221,10 @@ def download_polymarket_prices(
         ... )
         >>> print(df.head())
     """
+    # Set default data directory if not provided
+    if data_dir is None:
+        data_dir = str(get_data_dir() / "polymarket")
+
     # Validate inputs
     if start_date >= end_date:
         raise ValueError("start_date must be before end_date")
@@ -365,7 +370,7 @@ def download_polymarket_prices_by_slug(
     start_date: datetime,
     end_date: datetime,
     fidelity: int = 1,
-    data_dir: str = "data/polymarket",
+    data_dir: str = None,
     overwrite: bool = False,
 ) -> pd.DataFrame:
     """
@@ -395,6 +400,10 @@ def download_polymarket_prices_by_slug(
         ...     end_date=datetime(2024, 12, 2)
         ... )
     """
+    # Set default data directory if not provided
+    if data_dir is None:
+        data_dir = str(get_data_dir() / "polymarket")
+
     # Get market info
     market_info = get_market_info(market_slug)
 
@@ -500,7 +509,7 @@ def download_polymarket_prices_by_event(
     start_date: datetime = None,
     end_date: datetime = None,
     fidelity: int = 1,
-    data_dir: str = "data/polymarket",
+    data_dir: str = None,
     overwrite: bool = False,
 ) -> pd.DataFrame:
     """
@@ -541,6 +550,10 @@ def download_polymarket_prices_by_event(
         ...     fidelity=60  # Hourly data
         ... )
     """
+    # Set default data directory if not provided
+    if data_dir is None:
+        data_dir = str(get_data_dir() / "polymarket")
+
     # Get all markets for this event
     markets = get_event_markets(event_slug)
 
@@ -655,7 +668,7 @@ def _convert_numeric_columns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def get_all_closed_markets(
-    cache_dir: str = "data/polymarket",
+    cache_dir: str = None,
     overwrite: bool = False,
     max_markets: Optional[int] = None,
 ) -> pd.DataFrame:
@@ -716,6 +729,10 @@ def get_all_closed_markets(
         >>> # Find markets by category
         >>> election_markets = df[df['category'] == 'politics']
     """
+    # Set default cache directory if not provided
+    if cache_dir is None:
+        cache_dir = str(get_data_dir() / "polymarket")
+
     # Create cache directory
     cache_path = Path(cache_dir)
     cache_path.mkdir(parents=True, exist_ok=True)
@@ -841,7 +858,7 @@ def download_month_of_data(
     year: int,
     month: int,
     fidelity: int = 1,
-    data_dir: str = "data/polymarket",
+    data_dir: str = None,
     overwrite: bool = False,
 ) -> pd.DataFrame:
     """
@@ -869,6 +886,10 @@ def download_month_of_data(
         ...     month=10
         ... )
     """
+    # Set default data directory if not provided
+    if data_dir is None:
+        data_dir = str(get_data_dir() / "polymarket")
+
     # Validate month
     if not 1 <= month <= 12:
         raise ValueError("month must be between 1 and 12")
@@ -893,7 +914,7 @@ def download_month_of_data(
 
 
 def load_all_market_histories(
-    data_dir: str = "data/polymarket/market_histories",
+    data_dir: str = None,
     sample_per_day: bool = True,
     date_column: str = "date",
 ) -> pd.DataFrame:
@@ -941,6 +962,10 @@ def load_all_market_histories(
         ...     'days_remaining': ['min', 'max']
         ... })
     """
+    # Set default data directory if not provided
+    if data_dir is None:
+        data_dir = str(get_data_dir() / "polymarket" / "market_histories")
+
     data_path = Path(data_dir)
 
     if not data_path.exists():

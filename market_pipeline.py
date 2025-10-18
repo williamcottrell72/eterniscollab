@@ -34,6 +34,7 @@ import numpy as np
 from topic_generator import generate_topics_and_questions
 from buzz import estimate_daily_volume
 from probability_estimator import get_probability_distribution
+from utils import data_dir as get_data_dir
 
 
 def generate_questions(
@@ -290,7 +291,7 @@ def allocate_capital(
 def save_results(
     questions: List[Dict[str, Any]],
     pipeline_config: Dict[str, Any],
-    output_dir: str = "data/pipelines",
+    output_dir: str = None,
 ) -> Path:
     """
     Save pipeline results with full metadata for reproducibility.
@@ -298,7 +299,7 @@ def save_results(
     Args:
         questions: List of enriched question dicts with all estimates
         pipeline_config: Configuration dict with all pipeline parameters
-        output_dir: Base directory for pipeline outputs
+        output_dir: Base directory for pipeline outputs (default: None, uses data_dir() / 'pipelines')
 
     Returns:
         Path to the run directory
@@ -306,6 +307,10 @@ def save_results(
     print(f"\n{'='*80}")
     print("STEP 5: SAVING RESULTS")
     print(f"{'='*80}")
+
+    # Set default output directory if not provided
+    if output_dir is None:
+        output_dir = str(get_data_dir() / "pipelines")
 
     # Create timestamped directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
@@ -389,7 +394,7 @@ def run_market_pipeline(
     probability_model: str = "openai/gpt-4o-mini",
     reword_temperature: float = 0.7,
     api_key: Optional[str] = None,
-    output_dir: str = "data/pipelines",
+    output_dir: str = None,
 ) -> Dict[str, Any]:
     """
     Run the complete market pipeline from question generation to capital allocation.
@@ -405,7 +410,7 @@ def run_market_pipeline(
         probability_model: Model for probability estimation
         reword_temperature: Temperature for prompt rewording in probability estimation
         api_key: OpenRouter API key (if None, uses OPENROUTER_API_KEY env var)
-        output_dir: Base directory for saving results
+        output_dir: Base directory for saving results (default: None, uses data_dir() / 'pipelines')
 
     Returns:
         dict: Contains:
@@ -423,6 +428,10 @@ def run_market_pipeline(
         >>> print(f"Generated {len(results['questions'])} questions")
         >>> print(f"Results saved to: {results['output_dir']}")
     """
+    # Set default output directory if not provided
+    if output_dir is None:
+        output_dir = str(get_data_dir() / "pipelines")
+
     # Get API key
     if api_key is None:
         api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -543,11 +552,11 @@ if __name__ == "__main__":
         # Allow command-line override of total capital
         total_capital = float(sys.argv[1])
     else:
-        total_capital = 10000.0
+        total_capital = 25 * 1e6
 
     # Run pipeline with default settings
     results = run_market_pipeline(
-        n_topics=3,
+        n_topics=10,
         k_questions_per_topic=2,
         total_capital=total_capital,
         n_volume_examples=15,

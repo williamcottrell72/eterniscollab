@@ -360,6 +360,11 @@ Two types of temperature:
 
 
 ### Notebooks
+- **Keep notebooks clean and streamlined**:
+  - Move all library/utility functions to separate modules (e.g., `pipeline_analysis.py`, `make_market.py`)
+  - Import functions from modules rather than defining them in the notebook
+  - Notebooks should contain minimal code: imports, function calls, and presentation
+  - This makes notebooks more readable, maintainable, and easier to debug
 - Clear markdown sections explaining each step
 - Configuration at the top
 - Statistical summaries included
@@ -368,6 +373,27 @@ Two types of temperature:
 - **Notebooks should be runnable from start to finish**
 - Execute "Run All" should work without errors on a fresh kernel
 - Each notebook should be self-contained and complete
+
+**Example notebook structure**:
+```python
+# Imports at top
+from pipeline_analysis import list_pipeline_runs, load_pipeline_run, plot_capital_allocation
+import make_market
+
+# Minimal code - just function calls
+runs_df = list_pipeline_runs()
+run_data = load_pipeline_run(run_id)
+fig = plot_capital_allocation(run_data['results'])
+fig.show()
+```
+
+**Anti-pattern to avoid**:
+```python
+# DON'T define utility functions directly in notebooks
+def plot_capital_allocation(df):  # <-- Move this to a module!
+    # 50 lines of plotting code...
+    ...
+```
 
 ## Integration Points
 

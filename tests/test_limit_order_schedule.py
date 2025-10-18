@@ -371,26 +371,39 @@ class TestCreateOrderPriceSchedule:
         assert all(p < 0.5 for p in no_prices)
 
     def test_log_spacing(self):
-        """Test that prices are evenly spaced in log space."""
+        """Test that prices are approximately evenly spaced in log space.
+
+        Note: Discretization to min_tick_size will cause some deviation from
+        perfect log spacing, so we use a relaxed tolerance.
+        """
         yes_prices, no_prices = create_order_price_schedule(
             p=0.6, half_spread_bps=20, max_order_bps=500, num_orders=10
         )
 
-        # YES prices should have constant log spacing
+        # YES prices should have approximately constant log spacing
         log_yes = np.log(yes_prices)
         log_diffs_yes = np.diff(log_yes)
-        np.testing.assert_allclose(log_diffs_yes, log_diffs_yes[0], rtol=1e-10)
+        # After discretization, log spacing will vary by up to ~1 tick
+        # Relaxed tolerance to account for discretization effects
+        np.testing.assert_allclose(
+            log_diffs_yes, log_diffs_yes[0], rtol=0.5, atol=0.002
+        )
 
-        # NO prices (reversed) should have constant log spacing
+        # NO prices (reversed) should have approximately constant log spacing
         log_no = np.log(no_prices[::-1])  # Reverse to ascending
         log_diffs_no = np.diff(log_no)
-        np.testing.assert_allclose(log_diffs_no, log_diffs_no[0], rtol=1e-10)
+        np.testing.assert_allclose(log_diffs_no, log_diffs_no[0], rtol=0.5, atol=0.002)
 
     def test_price_bounds(self):
-        """Test that min/max prices match expected values from basis points."""
+        """Test that min/max prices are close to expected values from basis points.
+
+        Note: Discretization to min_tick_size means prices will be adjusted to
+        the nearest valid tick, so we check they're within one tick of expected.
+        """
         p = 0.7
         half_spread_bps = 50
         max_order_bps = 1000
+        min_tick_size = 0.001  # Default tick size
 
         yes_prices, no_prices = create_order_price_schedule(
             p=p,
@@ -399,20 +412,24 @@ class TestCreateOrderPriceSchedule:
             num_orders=5,
         )
 
-        # Check YES bounds
+        # Check YES bounds (within one tick)
         expected_yes_min = p * np.exp(half_spread_bps / 10000)
         expected_yes_max = p * np.exp(max_order_bps / 10000)
-        np.testing.assert_allclose(yes_prices[0], expected_yes_min, rtol=1e-10)
-        np.testing.assert_allclose(yes_prices[-1], expected_yes_max, rtol=1e-10)
+        np.testing.assert_allclose(yes_prices[0], expected_yes_min, atol=min_tick_size)
+        np.testing.assert_allclose(yes_prices[-1], expected_yes_max, atol=min_tick_size)
 
-        # Check NO bounds
+        # Check NO bounds (within one tick)
         expected_no_max = p * np.exp(-half_spread_bps / 10000)
         expected_no_min = p * np.exp(-max_order_bps / 10000)
-        np.testing.assert_allclose(no_prices[0], expected_no_max, rtol=1e-10)
-        np.testing.assert_allclose(no_prices[-1], expected_no_min, rtol=1e-10)
+        np.testing.assert_allclose(no_prices[0], expected_no_max, atol=min_tick_size)
+        np.testing.assert_allclose(no_prices[-1], expected_no_min, atol=min_tick_size)
 
     def test_single_order(self):
-        """Test with num_orders=1."""
+        """Test with num_orders=1.
+
+        Note: Discretization adjusts prices to nearest tick.
+        """
+        min_tick_size = 0.001
         yes_prices, no_prices = create_order_price_schedule(
             p=0.5, half_spread_bps=10, max_order_bps=100, num_orders=1
         )
@@ -421,15 +438,19 @@ class TestCreateOrderPriceSchedule:
         assert len(no_prices) == 1
 
         # With single order, linspace returns the start point
-        # For YES: start = half_spread (closest)
-        # For NO: linspace goes from min to max, so start = min (furthest)
+        # For YES: start = half_spread (closest), rounded up
+        # For NO: linspace goes from min to max, so start = min (furthest), rounded down
         expected_yes = 0.5 * np.exp(10 / 10000)
-        expected_no = 0.5 * np.exp(-100 / 10000)  # Note: max_order, not half_spread
-        np.testing.assert_allclose(yes_prices[0], expected_yes, rtol=1e-10)
-        np.testing.assert_allclose(no_prices[0], expected_no, rtol=1e-10)
+        expected_no = 0.5 * np.exp(-100 / 10000)
+        np.testing.assert_allclose(yes_prices[0], expected_yes, atol=min_tick_size)
+        np.testing.assert_allclose(no_prices[0], expected_no, atol=min_tick_size)
 
     def test_two_orders(self):
-        """Test with num_orders=2 to verify endpoints."""
+        """Test with num_orders=2 to verify endpoints.
+
+        Note: Discretization adjusts prices to nearest tick.
+        """
+        min_tick_size = 0.001
         yes_prices, no_prices = create_order_price_schedule(
             p=0.5, half_spread_bps=10, max_order_bps=100, num_orders=2
         )
@@ -437,16 +458,70 @@ class TestCreateOrderPriceSchedule:
         assert len(yes_prices) == 2
         assert len(no_prices) == 2
 
-        # With two orders, should be at half_spread and max_order
+        # With two orders, should be near half_spread and max_order
         expected_yes_min = 0.5 * np.exp(10 / 10000)
         expected_yes_max = 0.5 * np.exp(100 / 10000)
-        np.testing.assert_allclose(yes_prices[0], expected_yes_min, rtol=1e-10)
-        np.testing.assert_allclose(yes_prices[1], expected_yes_max, rtol=1e-10)
+        np.testing.assert_allclose(yes_prices[0], expected_yes_min, atol=min_tick_size)
+        np.testing.assert_allclose(yes_prices[1], expected_yes_max, atol=min_tick_size)
 
         expected_no_max = 0.5 * np.exp(-10 / 10000)
         expected_no_min = 0.5 * np.exp(-100 / 10000)
-        np.testing.assert_allclose(no_prices[0], expected_no_max, rtol=1e-10)
-        np.testing.assert_allclose(no_prices[1], expected_no_min, rtol=1e-10)
+        np.testing.assert_allclose(no_prices[0], expected_no_max, atol=min_tick_size)
+        np.testing.assert_allclose(no_prices[1], expected_no_min, atol=min_tick_size)
+
+    def test_discretization(self):
+        """Test that prices are properly discretized to min_tick_size."""
+        # Test with default tick size
+        yes_prices, no_prices = create_order_price_schedule(
+            p=0.635,
+            half_spread_bps=5,
+            max_order_bps=500,
+            num_orders=5,
+            min_tick_size=0.001,
+        )
+
+        # All prices should be multiples of 0.001
+        for price in yes_prices:
+            remainder = price % 0.001
+            assert (
+                abs(remainder) < 1e-10 or abs(remainder - 0.001) < 1e-10
+            ), f"YES price {price} not discretized to 0.001"
+
+        for price in no_prices:
+            remainder = price % 0.001
+            assert (
+                abs(remainder) < 1e-10 or abs(remainder - 0.001) < 1e-10
+            ), f"NO price {price} not discretized to 0.001"
+
+        # Verify YES prices are > p and NO prices are < p
+        assert all(yp > 0.635 for yp in yes_prices)
+        assert all(np < 0.635 for np in no_prices)
+
+        # Test with larger tick size
+        yes_prices, no_prices = create_order_price_schedule(
+            p=0.5,
+            half_spread_bps=10,
+            max_order_bps=1000,
+            num_orders=5,
+            min_tick_size=0.01,
+        )
+
+        # All prices should be multiples of 0.01
+        for price in yes_prices:
+            remainder = price % 0.01
+            assert (
+                abs(remainder) < 1e-10 or abs(remainder - 0.01) < 1e-10
+            ), f"YES price {price} not discretized to 0.01"
+
+        for price in no_prices:
+            remainder = price % 0.01
+            assert (
+                abs(remainder) < 1e-10 or abs(remainder - 0.01) < 1e-10
+            ), f"NO price {price} not discretized to 0.01"
+
+        # Verify YES prices are > p and NO prices are < p
+        assert all(yp > 0.5 for yp in yes_prices)
+        assert all(np < 0.5 for np in no_prices)
 
     def test_integration_with_order_schedule(self):
         """Test that output can be used directly with yes/no_order_schedule."""

@@ -133,6 +133,54 @@ Generate limit order schedule for NO market.
 **Raises:**
 - `ValueError`: If inputs are invalid or prob_schedule not descending
 
+### `create_order_price_schedule(p, half_spread_bps, max_order_bps, num_orders, min_tick_size=0.001)`
+
+Generate price schedules for placing limit orders on both sides of the market.
+
+**Parameters:**
+- `p` (float): Initial market probability, between 0 and 1
+- `half_spread_bps` (float): Half spread in basis points (1 bps = 0.01%)
+- `max_order_bps` (float): Maximum order distance in basis points
+- `num_orders` (int): Number of orders to place on each side
+- `min_tick_size` (float): Minimum price tick size for discretization (default: 0.001)
+
+**Returns:**
+- Tuple of `(yes_prices, no_prices)`:
+  - `yes_prices`: List of probabilities for YES orders (ascending, all > p)
+  - `no_prices`: List of probabilities for NO orders (descending, all < p)
+
+**Raises:**
+- `ValueError`: If inputs are invalid
+
+**Example:**
+```python
+from make_market import create_order_price_schedule
+
+# Generate price schedule with 0.001 tick size (default)
+yes_prices, no_prices = create_order_price_schedule(
+    p=0.635,
+    half_spread_bps=5,
+    max_order_bps=500,
+    num_orders=5,
+    min_tick_size=0.001
+)
+
+print(f"YES prices: {yes_prices}")
+# YES prices: [0.636, 0.644, 0.652, 0.660, 0.668]
+# All prices are multiples of 0.001
+
+print(f"NO prices: {no_prices}")
+# NO prices: [0.634, 0.626, 0.619, 0.611, 0.604]
+# All prices are multiples of 0.001
+```
+
+**Notes:**
+- All returned prices are discretized to multiples of `min_tick_size`
+- The first YES price is adjusted **upward** to ensure it's > p and on a tick boundary
+- The first NO price is adjusted **downward** to ensure it's < p and on a tick boundary
+- This ensures all orders are placed at valid price levels in real markets
+- Discretization introduces small deviations from perfect log-spacing
+
 ## Mathematical Foundation
 
 ### LMSR Probability Formula

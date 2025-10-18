@@ -125,6 +125,7 @@ def create_order_price_schedule(
     half_spread_bps: float,
     max_order_bps: float,
     num_orders: int,
+    min_tick_size: float = 0.001,
 ) -> tuple[list[float], list[float]]:
     """
     Create evenly spaced order price schedules for YES and NO orders in log space.
@@ -132,6 +133,10 @@ def create_order_price_schedule(
     This function generates price schedules for placing limit orders on both sides
     of the market. Prices are spaced evenly in log space from the initial price
     (determined by half_spread) to the maximum price (determined by max_order).
+
+    All prices are discretized to multiples of min_tick_size. The first YES price
+    is adjusted upward to the next allowed discrete level above p, and the first
+    NO price is adjusted downward to the next allowed discrete level below p.
 
     Args:
         p: Initial market probability (between 0 and 1)
@@ -142,6 +147,8 @@ def create_order_price_schedule(
                       Defines the furthest order from current price
                       Formula: max_order_bps = log(p_max/p) * 10000
         num_orders: Number of orders to place on each side
+        min_tick_size: Minimum price tick size for discretization (default: 0.001)
+                      All prices will be rounded to multiples of this value
 
     Returns:
         Tuple of (yes_prices, no_prices):
@@ -153,7 +160,8 @@ def create_order_price_schedule(
         ...     p=0.5,
         ...     half_spread_bps=10,      # 10 bps = 0.1% spread
         ...     max_order_bps=500,       # 500 bps = 5% max
-        ...     num_orders=5
+        ...     num_orders=5,
+        ...     min_tick_size=0.001
         ... )
         >>> print(f"YES orders at: {yes_prices}")
         >>> print(f"NO orders at: {no_prices}")
@@ -163,6 +171,7 @@ def create_order_price_schedule(
         - NO orders: Buy NO shares, decrease probability, prices < p
         - Log spacing means more orders near current price, fewer far away
         - For p=0.5, half_spread_bps=10 gives p_min ≈ 0.4995, p_max ≈ 0.5005
+        - All prices are discretized to multiples of min_tick_size
     """
     if not (0 < p < 1):
         raise ValueError(f"p must be between 0 and 1, got {p}")
@@ -174,6 +183,8 @@ def create_order_price_schedule(
         )
     if num_orders < 1:
         raise ValueError(f"num_orders must be at least 1, got {num_orders}")
+    if min_tick_size <= 0:
+        raise ValueError(f"min_tick_size must be positive, got {min_tick_size}")
 
     # Convert basis points to log space
     # User specifies: half_spread_bps = 10000 * log(p_near/p)
@@ -202,7 +213,28 @@ def create_order_price_schedule(
     # Create evenly spaced points in log space
     # log(p_yes) goes from log(p_yes_min) to log(p_yes_max)
     log_p_yes = np.linspace(np.log(p_yes_min), np.log(p_yes_max), num_orders)
-    yes_prices = np.exp(log_p_yes).tolist()
+    yes_prices_raw = np.exp(log_p_yes)
+
+    # Discretize YES prices to multiples of min_tick_size
+    # For YES: ALWAYS round up to the NEXT allowed discrete value
+    # We add a small epsilon to ensure we always move to the next tick, not the current one
+    yes_prices_discretized = (
+        np.ceil((yes_prices_raw + min_tick_size * 1e-9) / min_tick_size) * min_tick_size
+    )
+
+    # Ensure first YES price is strictly greater than p
+    # We need to find the smallest discretized price > p
+    # If p is on a tick: next tick is (p/min_tick_size + 1) * min_tick_size
+    # If p is between ticks: next tick is ceil(p/min_tick_size) * min_tick_size
+    # But ceil might equal p if p is on a tick, so we need: ceil(p/min_tick_size + epsilon) * min_tick_size
+    # Simpler: always use floor(p/min_tick_size) + 1
+    first_yes_candidate = (np.floor(p / min_tick_size + 1e-10) + 1) * min_tick_size
+    if yes_prices_discretized[0] <= p:
+        yes_prices_discretized[0] = first_yes_candidate
+
+    # Cap to ensure all prices < 1
+    yes_prices_discretized = np.minimum(yes_prices_discretized, 1.0 - min_tick_size)
+    yes_prices = yes_prices_discretized.tolist()
 
     # NO orders: prices decrease from p (buy NO shares → prob goes down)
     # For NO: 10000 * log(p / p_no) = bps
@@ -224,7 +256,25 @@ def create_order_price_schedule(
     # Create evenly spaced points in log space, then reverse for descending order
     # log(p_no) goes from log(p_no_min) to log(p_no_max)
     log_p_no = np.linspace(np.log(p_no_min), np.log(p_no_max), num_orders)
-    no_prices = np.exp(log_p_no).tolist()
+    no_prices_raw = np.exp(log_p_no)
+
+    # Discretize NO prices to multiples of min_tick_size
+    # For NO: ALWAYS round down to the PREVIOUS allowed discrete value
+    # We subtract a small epsilon to ensure we always move to the previous tick, not the current one
+    no_prices_discretized = (
+        np.floor((no_prices_raw - min_tick_size * 1e-9) / min_tick_size) * min_tick_size
+    )
+
+    # Ensure first NO price is strictly less than p (after reversal, first is at end)
+    # We need to find the largest discretized price < p
+    # This is: (ceil(p / min_tick_size) - 1) * min_tick_size
+    first_no_candidate = (np.ceil(p / min_tick_size) - 1) * min_tick_size
+    if no_prices_discretized[-1] >= p:
+        no_prices_discretized[-1] = first_no_candidate
+
+    # Cap to ensure all prices > 0
+    no_prices_discretized = np.maximum(no_prices_discretized, min_tick_size)
+    no_prices = no_prices_discretized.tolist()
     no_prices.reverse()  # Descending order for NO market
 
     return yes_prices, no_prices
@@ -512,6 +562,106 @@ def no_order_schedule(
         df["dcost_verification"] = df["dcost_verification"] * scale_factor
 
     return df
+
+
+def create_lob_data(
+    probability: float,
+    capital: float,
+    Q: float = 1000,
+    B: float = 10000,
+    half_spread_bps: float = 5,
+    max_order_bps: float = 500,
+    num_orders_coarse: int = 5,
+    num_orders_fine: int = 50,
+) -> dict:
+    """
+    Create LOB (Limit Order Book) data for a single market.
+
+    This function generates both coarse (discrete points) and fine (continuous line)
+    limit order book schedules for visualizing capital allocation across price levels.
+
+    Args:
+        probability: Market probability (between 0 and 1)
+        capital: Allocated capital for this market
+        Q: Total shares outstanding (default: 1000)
+        B: Market depth parameter (default: 10000)
+        half_spread_bps: Half spread in basis points (default: 5)
+        max_order_bps: Maximum order distance in basis points (default: 500)
+        num_orders_coarse: Number of discrete order points (default: 5)
+        num_orders_fine: Number of points for fine schedule line (default: 50)
+
+    Returns:
+        dict with:
+        - 'coarse_prices': Discrete price points (for scatter plot)
+        - 'coarse_lob': LOB values at discrete points (for scatter plot)
+        - 'fine_prices': Fine price points (for line plot)
+        - 'fine_lob': LOB values for fine schedule (for line plot)
+        - 'scale_factor': Capital scaling factor
+
+    Example:
+        >>> lob_data = create_lob_data(probability=0.635, capital=1000)
+        >>> print(f"Scale factor: {lob_data['scale_factor']:.2f}")
+        >>> # Use lob_data['coarse_prices'], lob_data['coarse_lob'] for scatter plot
+        >>> # Use lob_data['fine_prices'], lob_data['fine_lob'] for line plot
+    """
+    # Create coarse schedule for discrete points (dots)
+    yes_schedule_coarse, no_schedule_coarse = create_order_price_schedule(
+        p=probability,
+        half_spread_bps=half_spread_bps,
+        max_order_bps=max_order_bps,
+        num_orders=num_orders_coarse,
+    )
+
+    cum_yes_order_cost_coarse = yes_order_schedule(
+        probability, Q, yes_schedule_coarse, b=B
+    )["cost_cumulative"].values
+
+    cum_no_order_cost_coarse = no_order_schedule(
+        probability, Q, no_schedule_coarse, b=B
+    )["cost_cumulative"].values
+
+    # Calculate scale factor from coarse schedule
+    unscaled_capital = max(cum_yes_order_cost_coarse) + max(cum_no_order_cost_coarse)
+    scale_factor = capital / unscaled_capital
+
+    # Coarse schedule for dots
+    coarse_prices = np.concatenate([no_schedule_coarse[::-1], yes_schedule_coarse])
+    coarse_lob = (
+        np.concatenate([cum_no_order_cost_coarse[::-1], cum_yes_order_cost_coarse])
+        * scale_factor
+    )
+
+    # Create fine schedule for line
+    yes_schedule_fine, no_schedule_fine = create_order_price_schedule(
+        p=probability,
+        half_spread_bps=half_spread_bps,
+        max_order_bps=max_order_bps,
+        num_orders=num_orders_fine,
+        min_tick_size=1e-6,
+    )
+
+    cum_yes_order_cost_fine = yes_order_schedule(
+        probability, Q, yes_schedule_fine, b=B
+    )["cost_cumulative"].values
+
+    cum_no_order_cost_fine = no_order_schedule(probability, Q, no_schedule_fine, b=B)[
+        "cost_cumulative"
+    ].values
+
+    # Fine schedule for line (using same scale factor)
+    fine_prices = np.concatenate([no_schedule_fine[::-1], yes_schedule_fine])
+    fine_lob = (
+        np.concatenate([cum_no_order_cost_fine[::-1], cum_yes_order_cost_fine])
+        * scale_factor
+    )
+
+    return {
+        "coarse_prices": coarse_prices,
+        "coarse_lob": coarse_lob,
+        "fine_prices": fine_prices,
+        "fine_lob": fine_lob,
+        "scale_factor": scale_factor,
+    }
 
 
 if __name__ == "__main__":

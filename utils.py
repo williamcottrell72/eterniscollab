@@ -8,6 +8,48 @@ and a unified interface for querying different LLM providers.
 import re
 from typing import Optional
 import os
+from pathlib import Path
+
+
+def root_dir() -> Path:
+    """
+    Return the full path to the project root directory.
+
+    This function finds the root directory by locating the directory
+    containing this utils.py file and going up one level.
+
+    Returns:
+        Path: Full path to the project root directory
+
+    Example:
+        >>> root = root_dir()
+        >>> print(root)
+        /Users/username/git/eterniscollab
+    """
+    # utils.py is in the root directory, so we return its parent directory's parent
+    # Actually, utils.py IS in the root, so we just return its directory
+    return Path(__file__).parent.resolve()
+
+
+def data_dir() -> Path:
+    """
+    Return the full path to the project's data directory.
+
+    This function calls root_dir() and appends 'data' to get the data directory path.
+    The directory is created if it doesn't exist.
+
+    Returns:
+        Path: Full path to the data directory
+
+    Example:
+        >>> data = data_dir()
+        >>> print(data)
+        /Users/username/git/eterniscollab/data
+    """
+    data_path = root_dir() / "data"
+    # Create the directory if it doesn't exist
+    data_path.mkdir(exist_ok=True)
+    return data_path
 
 
 def generate_knowledge_cutoff_instruction(
